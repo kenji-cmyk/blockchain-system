@@ -19,6 +19,14 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 
 ## Running the Project
 
+Create a local application config from the example:
+
+```bash
+cp src/main/resources/application-example.properties src/main/resources/application.properties
+```
+
+`application.properties` is ignored by Git so local settings can be changed safely.
+
 ```bash
 mvn spring-boot:run
 ```
