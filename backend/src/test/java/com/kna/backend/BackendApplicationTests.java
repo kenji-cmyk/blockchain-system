@@ -2,6 +2,7 @@ package com.kna.backend;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,8 +12,15 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -517,6 +525,90 @@ class BackendApplicationTests {
     }
 
     @Test
+    void canRegisterHttpPeerCheckHealthDiscoverAndRemove() throws Exception {
+        HttpServer server = startPeerServer("{\"size\":1,\"difficulty\":2,\"pendingTransactions\":0,\"valid\":true}", "[]");
+        try {
+            String baseUrl = "http://localhost:" + server.getAddress().getPort();
+
+            mockMvc.perform(post("/api/peers")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "peerId": "node-http",
+                                      "baseUrl": "%s"
+                                    }
+                                    """.formatted(baseUrl)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.peerId").value("node-http"))
+                    .andExpect(jsonPath("$.mode").value("http"))
+                    .andExpect(jsonPath("$.baseUrl").value(baseUrl))
+                    .andExpect(jsonPath("$.healthy").value(true))
+                    .andExpect(jsonPath("$.chainSize").value(1));
+
+            mockMvc.perform(get("/api/peers/node-http/health"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.healthy").value(true));
+
+            mockMvc.perform(post("/api/peers/discover")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"peerUrls\":[\"%s/\"]}".formatted(baseUrl)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].peerId", startsWith("localhost-")))
+                    .andExpect(jsonPath("$[0].mode").value("http"));
+
+            mockMvc.perform(delete("/api/peers/node-http"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.peerId").value("node-http"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void broadcastsTransactionsAndBlocksToHttpPeers() throws Exception {
+        AtomicInteger transactionBroadcasts = new AtomicInteger();
+        AtomicInteger blockBroadcasts = new AtomicInteger();
+        HttpServer server = startBroadcastPeerServer(transactionBroadcasts, blockBroadcasts);
+        try {
+            String baseUrl = "http://localhost:" + server.getAddress().getPort();
+            mockMvc.perform(post("/api/peers")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "peerId": "node-http",
+                                      "baseUrl": "%s"
+                                    }
+                                    """.formatted(baseUrl)))
+                    .andExpect(status().isCreated());
+
+            JsonObject senderWallet = createWallet();
+            JsonObject receiverWallet = createWallet();
+            JsonObject minerWallet = createWallet();
+            fundWallet(senderWallet);
+
+            mockMvc.perform(post("/api/transactions")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transactionJson(senderWallet, receiverWallet, 1, 0.25)))
+                    .andExpect(status().isCreated());
+
+            mockMvc.perform(post("/api/peers/broadcast/transactions"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.peerCount").value(1))
+                    .andExpect(jsonPath("$.successCount").value(1));
+
+            mockMvc.perform(post("/api/transactions/mine")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mineJson(minerWallet)))
+                    .andExpect(status().isCreated());
+
+            org.hamcrest.MatcherAssert.assertThat(transactionBroadcasts.get(), org.hamcrest.Matchers.greaterThanOrEqualTo(2));
+            org.hamcrest.MatcherAssert.assertThat(blockBroadcasts.get(), org.hamcrest.Matchers.greaterThanOrEqualTo(2));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/api/docs/openapi"))
                 .andExpect(status().isOk())
@@ -524,6 +616,8 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.info.title").value("Blockchain Learning Backend API"))
                 .andExpect(jsonPath("$.paths['/api/blocks']").exists())
                 .andExpect(jsonPath("$.paths['/api/wallets/{address}/balance']").exists())
+                .andExpect(jsonPath("$.paths['/api/peers/{peerId}/health']").exists())
+                .andExpect(jsonPath("$.paths['/api/peers/discover']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/sync']").exists());
     }
 
@@ -587,6 +681,41 @@ class BackendApplicationTests {
                   "minerAddress": "%s"
                 }
                 """.formatted(wallet.get("publicKey").getAsString());
+    }
+
+    private HttpServer startPeerServer(String statusJson, String blocksJson) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/api/chain/status", exchange -> writeJson(exchange, statusJson));
+        server.createContext("/api/blocks", exchange -> writeJson(exchange, blocksJson));
+        server.start();
+        return server;
+    }
+
+    private HttpServer startBroadcastPeerServer(
+            AtomicInteger transactionBroadcasts,
+            AtomicInteger blockBroadcasts
+    ) throws IOException {
+        HttpServer server = startPeerServer(
+                "{\"size\":1,\"difficulty\":2,\"pendingTransactions\":0,\"valid\":true}",
+                "[]"
+        );
+        server.createContext("/api/transactions/broadcast", exchange -> {
+            transactionBroadcasts.incrementAndGet();
+            writeJson(exchange, "{\"transactionId\":\"accepted\"}");
+        });
+        server.createContext("/api/blocks/broadcast", exchange -> {
+            blockBroadcasts.incrementAndGet();
+            writeJson(exchange, "{\"accepted\":true}");
+        });
+        return server;
+    }
+
+    private void writeJson(com.sun.net.httpserver.HttpExchange exchange, String json) throws IOException {
+        byte[] response = json.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(200, response.length);
+        exchange.getResponseBody().write(response);
+        exchange.close();
     }
 
 }

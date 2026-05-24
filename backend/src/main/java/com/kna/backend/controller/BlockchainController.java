@@ -1,12 +1,17 @@
 package com.kna.backend.controller;
 
+import com.google.gson.Gson;
 import com.kna.backend.dto.AddBlockRequest;
 import com.kna.backend.dto.ApiMessage;
 import com.kna.backend.dto.BlockchainStatus;
+import com.kna.backend.dto.BroadcastBlockResult;
+import com.kna.backend.dto.BroadcastResult;
 import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
 import com.kna.backend.dto.MinePeerBlockRequest;
 import com.kna.backend.dto.MineTransactionsRequest;
+import com.kna.backend.dto.PeerDiscoveryRequest;
+import com.kna.backend.dto.PeerHealth;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.RegisterPeerRequest;
 import com.kna.backend.dto.SyncResult;
@@ -19,6 +24,7 @@ import com.kna.backend.service.BlockchainService;
 import com.kna.backend.service.PeerNodeService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +41,7 @@ import java.util.List;
 @RequestMapping("/api")
 public class BlockchainController {
 
+    private final Gson gson = new Gson();
     private final BlockchainService blockchainService;
     private final PeerNodeService peerNodeService;
 
@@ -61,7 +68,19 @@ public class BlockchainController {
     @ResponseStatus(HttpStatus.CREATED)
     public Block addBlock(@Valid @RequestBody AddBlockRequest request) {
         try {
-            return blockchainService.addBlock(request.data());
+            Block block = blockchainService.addBlock(request.data());
+            peerNodeService.broadcastBlock(block);
+            return block;
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/blocks/broadcast")
+    public BroadcastBlockResult acceptBroadcastBlock(@RequestBody String body) {
+        try {
+            Block block = gson.fromJson(body, Block.class);
+            return new BroadcastBlockResult(blockchainService.acceptBroadcastBlock(block));
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
@@ -90,13 +109,25 @@ public class BlockchainController {
     @ResponseStatus(HttpStatus.CREATED)
     public Transaction createTransaction(@Valid @RequestBody CreateTransactionRequest request) {
         try {
-            return blockchainService.createTransaction(
+            Transaction transaction = blockchainService.createTransaction(
                     request.sender(),
                     request.receiver(),
                     request.amount(),
                     request.fee(),
                     request.privateKey()
             );
+            peerNodeService.broadcastTransaction(transaction);
+            return transaction;
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/transactions/broadcast")
+    public Transaction acceptBroadcastTransaction(@RequestBody String body) {
+        try {
+            Transaction transaction = gson.fromJson(body, Transaction.class);
+            return blockchainService.addPendingTransaction(transaction);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
@@ -106,7 +137,9 @@ public class BlockchainController {
     @ResponseStatus(HttpStatus.CREATED)
     public Block minePendingTransactions(@Valid @RequestBody MineTransactionsRequest request) {
         try {
-            return blockchainService.minePendingTransactions(request.rewardAddress());
+            Block block = blockchainService.minePendingTransactions(request.rewardAddress());
+            peerNodeService.broadcastBlock(block);
+            return block;
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
@@ -116,7 +149,16 @@ public class BlockchainController {
     @ResponseStatus(HttpStatus.CREATED)
     public PeerSummary registerPeer(@Valid @RequestBody RegisterPeerRequest request) {
         try {
-            return peerNodeService.registerPeer(request.peerId());
+            return peerNodeService.registerPeer(request.peerId(), request.baseUrl());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/peers/discover")
+    public List<PeerSummary> discoverPeers(@Valid @RequestBody PeerDiscoveryRequest request) {
+        try {
+            return peerNodeService.discoverPeers(request.peerUrls());
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
@@ -125,6 +167,38 @@ public class BlockchainController {
     @GetMapping("/peers")
     public List<PeerSummary> getPeers() {
         return peerNodeService.getPeers();
+    }
+
+    @GetMapping("/peers/{peerId}/health")
+    public PeerHealth checkPeerHealth(@PathVariable String peerId) {
+        try {
+            return peerNodeService.checkHealth(peerId);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage(), exception);
+        }
+    }
+
+    @DeleteMapping("/peers/{peerId}")
+    public PeerSummary removePeer(@PathVariable String peerId) {
+        try {
+            return peerNodeService.removePeer(peerId);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/peers/broadcast/transactions")
+    public BroadcastResult broadcastPendingTransactions() {
+        BroadcastResult result = new BroadcastResult(0, 0, 0);
+        for (Transaction transaction : blockchainService.getPendingTransactions()) {
+            BroadcastResult next = peerNodeService.broadcastTransaction(transaction);
+            result = new BroadcastResult(
+                    result.peerCount() + next.peerCount(),
+                    result.successCount() + next.successCount(),
+                    result.failureCount() + next.failureCount()
+            );
+        }
+        return result;
     }
 
     @GetMapping("/peers/{peerId}/chain")

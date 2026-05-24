@@ -1,6 +1,6 @@
 # Blockchain System
 
-Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, signed transactions, wallets, balances, fees, mining rewards, pending transactions, simulated peers, and basic chain synchronization.
+Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, signed transactions, wallets, balances, fees, mining rewards, pending transactions, simulated peers, HTTP peers, and basic chain synchronization.
 
 This is not a production blockchain. The project intentionally keeps the architecture small and observable so each concept can be tested, broken, reset, and extended step by step.
 
@@ -18,7 +18,12 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Shows available wallet balance after subtracting pending outgoing transactions.
 - Mines pending transactions into new blocks with miner rewards plus collected fees.
 - Limits the number of transactions that can be included in one block.
-- Simulates peer nodes inside the same app.
+- Supports simulated peer nodes inside the same app.
+- Supports HTTP-based peer registration for multi-instance demos.
+- Checks peer health and removes peers from the local registry.
+- Discovers peers from configured peer URLs.
+- Broadcasts pending transactions and newly mined blocks to HTTP peers.
+- Uses configurable peer request timeout and retry attempts.
 - Resolves conflicts by adopting a longer valid peer chain.
 - Exposes a tamper API for validation demos.
 - Returns unified JSON error responses.
@@ -120,11 +125,17 @@ Important endpoints:
 - `PUT /api/chain/difficulty`: update mining difficulty.
 - `POST /api/chain/tamper`: intentionally tamper with a block.
 - `POST /api/chain/reset`: reset chain state.
-- `POST /api/peers`: register a simulated peer.
-- `GET /api/peers`: list simulated peers.
+- `POST /api/peers`: register a simulated peer or HTTP peer.
+- `GET /api/peers`: list registered peers.
+- `POST /api/peers/discover`: register peers from base URLs.
+- `GET /api/peers/{peerId}/health`: check peer health.
+- `DELETE /api/peers/{peerId}`: remove a peer.
 - `GET /api/peers/{peerId}/chain`: fetch a peer chain.
 - `POST /api/peers/{peerId}/blocks`: mine a demo block on a peer.
 - `POST /api/peers/{peerId}/sync`: sync from a peer.
+- `POST /api/peers/broadcast/transactions`: broadcast current pending transactions.
+- `POST /api/transactions/broadcast`: accept a transaction broadcast from a peer.
+- `POST /api/blocks/broadcast`: accept a block broadcast from a peer.
 - `GET /api/docs/openapi`: view the OpenAPI document.
 
 ## Balance Model
@@ -147,18 +158,10 @@ Completed:
 - Section C: simulated peers, peer registration, peer chain fetch, longer-valid-chain conflict resolution, and sync demo.
 - Section D: unified error responses, validation annotations, OpenAPI document, mining logs, optional persistence, Dockerfile, and Docker Compose.
 - Phase 1: transaction fees, miner fee collection, chain-derived wallet balances, insufficient-balance rejection, account-state documentation, URL-safe wallet keys, and transaction count limits per block.
+- Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
 - API tests for all current endpoints.
 
 ## Future Plan
-
-### Phase 2: Improve Peer Networking
-
-- Move from in-app simulated peers to HTTP-based multi-instance peers.
-- Add peer health checks.
-- Add peer discovery and peer removal.
-- Broadcast pending transactions to peers.
-- Broadcast newly mined blocks to peers.
-- Add sync retry and timeout handling.
 
 ### Phase 3: Strengthen Consensus and Validation
 

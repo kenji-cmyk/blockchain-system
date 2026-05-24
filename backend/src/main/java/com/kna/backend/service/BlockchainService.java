@@ -81,17 +81,26 @@ public class BlockchainService {
     public synchronized Transaction createTransaction(String sender, String receiver, double amount, double fee, String privateKey) {
         validateTransactionInput(sender, receiver, amount, fee, privateKey);
 
-        double availableBalance = getAvailableBalance(sender);
-        double totalCost = amount + fee;
-        if (availableBalance < totalCost) {
-            throw new IllegalArgumentException("Sender balance is insufficient");
-        }
-
         Transaction transaction = new Transaction(sender, receiver, amount, fee);
         transaction.sign(privateKey);
+        return addPendingTransaction(transaction);
+    }
 
+    public synchronized Transaction addPendingTransaction(Transaction transaction) {
         if (!transaction.isValid()) {
             throw new IllegalArgumentException("Transaction signature is invalid");
+        }
+
+        boolean duplicate = pendingTransactions.stream()
+                .anyMatch(existing -> existing.getTransactionId().equals(transaction.getTransactionId()));
+        if (duplicate) {
+            return transaction;
+        }
+
+        double availableBalance = getAvailableBalance(transaction.getSender());
+        double totalCost = transaction.getAmount() + transaction.getFee();
+        if (availableBalance < totalCost) {
+            throw new IllegalArgumentException("Sender balance is insufficient");
         }
 
         pendingTransactions.add(transaction);
@@ -124,6 +133,31 @@ public class BlockchainService {
 
     public synchronized boolean isValid() {
         return isChainValid(blockchain, difficulty, maxTransactionsPerBlock);
+    }
+
+    public synchronized boolean acceptBroadcastBlock(Block block) {
+        if (block == null) {
+            throw new IllegalArgumentException("Block must not be null");
+        }
+
+        Block previousBlock = blockchain.getLast();
+        if (block.getIndex() != blockchain.size()) {
+            return false;
+        }
+        if (!previousBlock.getHash().equals(block.getPreviousHash())) {
+            return false;
+        }
+
+        List<Block> candidateChain = new ArrayList<>(blockchain);
+        candidateChain.add(block);
+        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock)) {
+            return false;
+        }
+
+        blockchain.add(block);
+        removeMinedPendingTransactions(block);
+        chainPersistenceService.saveChain(blockchain);
+        return true;
     }
 
     public synchronized void tamperBlock(int index, String data) {
@@ -213,6 +247,15 @@ public class BlockchainService {
         blockchain.add(block);
         chainPersistenceService.saveChain(blockchain);
         return block;
+    }
+
+    private void removeMinedPendingTransactions(Block block) {
+        List<String> minedTransactionIds = block.getTransactions()
+                .stream()
+                .filter(transaction -> !transaction.isMiningReward())
+                .map(Transaction::getTransactionId)
+                .toList();
+        pendingTransactions.removeIf(transaction -> minedTransactionIds.contains(transaction.getTransactionId()));
     }
 
     private void loadOrReset() {

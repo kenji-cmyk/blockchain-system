@@ -1,11 +1,9 @@
 package com.kna.backend.dto;
 
-public record PeerSummary(
+public record PeerHealth(
         String peerId,
-        int chainSize,
-        boolean valid,
         String baseUrl,
         boolean healthy,
-        String mode
+        String message
 ) {
 }

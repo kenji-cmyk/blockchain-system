@@ -1,13 +1,24 @@
 package com.kna.backend.service;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.kna.backend.dto.BroadcastResult;
+import com.kna.backend.dto.PeerHealth;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.SyncResult;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.Type;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,34 +30,88 @@ import static com.kna.backend.pkg.validate.Validator.isChainValid;
 public class PeerNodeService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PeerNodeService.class);
+    private static final Type BLOCK_LIST_TYPE = new TypeToken<List<Block>>() {
+    }.getType();
 
     private final BlockchainService blockchainService;
-    private final Map<String, List<Block>> peerChains = new LinkedHashMap<>();
+    private final Map<String, PeerNode> peers = new LinkedHashMap<>();
+    private final Gson gson = new Gson();
+    private final HttpClient httpClient;
+    private final Duration timeout;
+    private final int retryAttempts;
 
-    public PeerNodeService(BlockchainService blockchainService) {
+    public PeerNodeService(
+            BlockchainService blockchainService,
+            @Value("${blockchain.peer.timeout-ms:1500}") long timeoutMs,
+            @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts
+    ) {
         this.blockchainService = blockchainService;
+        this.timeout = Duration.ofMillis(timeoutMs);
+        this.retryAttempts = Math.max(1, retryAttempts);
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .build();
     }
 
-    public synchronized PeerSummary registerPeer(String peerId) {
+    public synchronized PeerSummary registerPeer(String peerId, String baseUrl) {
         validatePeerId(peerId);
-        peerChains.putIfAbsent(peerId, new ArrayList<>(blockchainService.getBlocks()));
+        String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+        peers.putIfAbsent(peerId, new PeerNode(
+                peerId,
+                normalizedBaseUrl,
+                normalizedBaseUrl == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
+        ));
         return toSummary(peerId);
     }
 
+    public synchronized List<PeerSummary> discoverPeers(List<String> peerUrls) {
+        if (peerUrls == null || peerUrls.isEmpty()) {
+            throw new IllegalArgumentException("Peer URLs must not be empty");
+        }
+        return peerUrls.stream()
+                .map(this::normalizeBaseUrl)
+                .map(baseUrl -> registerPeer(peerIdFromUrl(baseUrl), baseUrl))
+                .toList();
+    }
+
     public synchronized List<PeerSummary> getPeers() {
-        return peerChains.keySet().stream()
+        return peers.keySet().stream()
                 .map(this::toSummary)
                 .toList();
     }
 
+    public synchronized PeerSummary removePeer(String peerId) {
+        validatePeerId(peerId);
+        PeerNode removed = peers.remove(peerId);
+        if (removed == null) {
+            throw new IllegalArgumentException("Peer does not exist");
+        }
+        return toSummary(removed);
+    }
+
+    public synchronized PeerHealth checkHealth(String peerId) {
+        PeerNode peer = getPeer(peerId);
+        return checkHealth(peer);
+    }
+
     public synchronized List<Block> getPeerChain(String peerId) {
-        return List.copyOf(getMutablePeerChain(peerId));
+        PeerNode peer = getPeer(peerId);
+        if (peer.isHttp()) {
+            return fetchPeerChain(peer);
+        }
+        return List.copyOf(peer.simulatedChain());
     }
 
     public synchronized Block mineDemoBlock(String peerId, String minerAddress) {
         validateData(minerAddress, "Miner address must not be blank");
 
-        List<Block> chain = getMutablePeerChain(peerId);
+        PeerNode peer = getPeer(peerId);
+        if (peer.isHttp()) {
+            String response = postJson(peer.baseUrl() + "/api/blocks", "{\"data\":\"%s\"}".formatted(minerAddress));
+            return gson.fromJson(response, Block.class);
+        }
+
+        List<Block> chain = peer.simulatedChain();
         Block previousBlock = chain.getLast();
         Transaction reward = Transaction.miningReward(minerAddress, blockchainService.getMiningReward());
         Block block = new Block(chain.size(), List.of(reward), previousBlock.getHash());
@@ -71,7 +136,8 @@ public class PeerNodeService {
     }
 
     public synchronized SyncResult syncFromPeer(String peerId) {
-        List<Block> peerChain = getMutablePeerChain(peerId);
+        PeerNode peer = getPeer(peerId);
+        List<Block> peerChain = peer.isHttp() ? fetchPeerChain(peer) : peer.simulatedChain();
         int localSizeBefore = blockchainService.getBlocks().size();
         boolean peerValid = isChainValid(
                 peerChain,
@@ -93,30 +159,130 @@ public class PeerNodeService {
         return new SyncResult(peerId, peerChain.size(), localSizeBefore, localSizeAfter, peerValid, adopted, message);
     }
 
+    public synchronized BroadcastResult broadcastTransaction(Transaction transaction) {
+        return broadcastJson("/api/transactions/broadcast", gson.toJson(transaction));
+    }
+
+    public synchronized BroadcastResult broadcastBlock(Block block) {
+        return broadcastJson("/api/blocks/broadcast", gson.toJson(block));
+    }
+
     public synchronized void resetPeers() {
-        peerChains.clear();
+        peers.clear();
+    }
+
+    private BroadcastResult broadcastJson(String path, String body) {
+        int peerCount = 0;
+        int successCount = 0;
+        for (PeerNode peer : peers.values()) {
+            if (!peer.isHttp()) {
+                continue;
+            }
+            peerCount++;
+            try {
+                postJson(peer.baseUrl() + path, body);
+                successCount++;
+            } catch (IllegalArgumentException exception) {
+                LOGGER.warn("Could not broadcast {} to peer {}", path, peer.peerId(), exception);
+            }
+        }
+        return new BroadcastResult(peerCount, successCount, peerCount - successCount);
     }
 
     private PeerSummary toSummary(String peerId) {
-        List<Block> chain = peerChains.get(peerId);
+        return toSummary(getPeer(peerId));
+    }
+
+    private PeerSummary toSummary(PeerNode peer) {
+        if (peer.isHttp()) {
+            PeerHealth health = checkHealth(peer);
+            int chainSize = 0;
+            boolean valid = false;
+            if (health.healthy()) {
+                try {
+                    com.kna.backend.dto.BlockchainStatus status = gson.fromJson(health.message(), com.kna.backend.dto.BlockchainStatus.class);
+                    chainSize = status.size();
+                    valid = status.valid();
+                } catch (Exception exception) {
+                    LOGGER.warn("Could not parse peer health status for {}", peer.peerId(), exception);
+                }
+            }
+            return new PeerSummary(peer.peerId(), chainSize, valid, peer.baseUrl(), health.healthy(), "http");
+        }
+
+        List<Block> chain = peer.simulatedChain();
         return new PeerSummary(
-                peerId,
+                peer.peerId(),
                 chain.size(),
-                isChainValid(
-                        chain,
-                        blockchainService.getDifficulty(),
-                        blockchainService.getMaxTransactionsPerBlock()
-                )
+                isChainValid(chain, blockchainService.getDifficulty(), blockchainService.getMaxTransactionsPerBlock()),
+                null,
+                true,
+                "simulated"
         );
     }
 
-    private List<Block> getMutablePeerChain(String peerId) {
-        validatePeerId(peerId);
-        List<Block> chain = peerChains.get(peerId);
-        if (chain == null) {
-            throw new IllegalArgumentException("Peer does not exist");
+    private PeerHealth checkHealth(PeerNode peer) {
+        if (!peer.isHttp()) {
+            return new PeerHealth(peer.peerId(), null, true, "Simulated peer is healthy");
+        }
+
+        try {
+            String response = getString(peer.baseUrl() + "/api/chain/status");
+            return new PeerHealth(peer.peerId(), peer.baseUrl(), true, response);
+        } catch (IllegalArgumentException exception) {
+            return new PeerHealth(peer.peerId(), peer.baseUrl(), false, exception.getMessage());
+        }
+    }
+
+    private List<Block> fetchPeerChain(PeerNode peer) {
+        String response = getString(peer.baseUrl() + "/api/blocks");
+        List<Block> chain = gson.fromJson(response, BLOCK_LIST_TYPE);
+        if (chain == null || chain.isEmpty()) {
+            throw new IllegalArgumentException("Peer returned an empty chain");
         }
         return chain;
+    }
+
+    private String getString(String url) {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(timeout)
+                .GET()
+                .build();
+        return sendWithRetry(request);
+    }
+
+    private String postJson(String url, String body) {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(timeout)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return sendWithRetry(request);
+    }
+
+    private String sendWithRetry(HttpRequest request) {
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= retryAttempts; attempt++) {
+            try {
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    return response.body();
+                }
+                throw new IllegalArgumentException("Peer returned HTTP " + response.statusCode());
+            } catch (Exception exception) {
+                lastException = exception;
+            }
+        }
+        throw new IllegalArgumentException("Peer request failed: " + lastException.getMessage(), lastException);
+    }
+
+    private PeerNode getPeer(String peerId) {
+        validatePeerId(peerId);
+        PeerNode peer = peers.get(peerId);
+        if (peer == null) {
+            throw new IllegalArgumentException("Peer does not exist");
+        }
+        return peer;
     }
 
     private void validatePeerId(String peerId) {
@@ -126,6 +292,34 @@ public class PeerNodeService {
     private void validateData(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
+        }
+    }
+
+    private String normalizeBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return null;
+        }
+        String normalized = baseUrl.strip();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        URI uri = URI.create(normalized);
+        if (uri.getScheme() == null || uri.getHost() == null) {
+            throw new IllegalArgumentException("Peer base URL must be absolute");
+        }
+        return normalized;
+    }
+
+    private String peerIdFromUrl(String baseUrl) {
+        URI uri = URI.create(baseUrl);
+        int port = uri.getPort();
+        String portText = port == -1 ? "" : "-" + port;
+        return (uri.getHost() + portText).replace(".", "-");
+    }
+
+    private record PeerNode(String peerId, String baseUrl, List<Block> simulatedChain) {
+        boolean isHttp() {
+            return baseUrl != null;
         }
     }
 }

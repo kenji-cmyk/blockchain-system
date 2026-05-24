@@ -33,8 +33,10 @@ public class OpenApiController {
         paths.put("/api/wallets/new", Map.of("get", operation("Create a wallet")));
         paths.put("/api/wallets/{address}/balance", Map.of("get", operation("View a wallet balance")));
         paths.put("/api/transactions", Map.of("post", operation("Create a signed transaction")));
+        paths.put("/api/transactions/broadcast", Map.of("post", operation("Accept a broadcast transaction")));
         paths.put("/api/transactions/pending", Map.of("get", operation("View pending transactions")));
         paths.put("/api/transactions/mine", Map.of("post", operation("Mine pending transactions")));
+        paths.put("/api/blocks/broadcast", Map.of("post", operation("Accept a broadcast block")));
         paths.put("/api/chain/validate", Map.of("get", operation("Validate the chain")));
         paths.put("/api/chain/status", Map.of("get", operation("View chain status")));
         paths.put("/api/chain/difficulty", Map.of("put", operation("Update mining difficulty")));
@@ -44,7 +46,11 @@ public class OpenApiController {
                 "get", operation("View registered simulated peers"),
                 "post", operation("Register a simulated peer")
         ));
+        paths.put("/api/peers/discover", Map.of("post", operation("Discover HTTP peers")));
+        paths.put("/api/peers/broadcast/transactions", Map.of("post", operation("Broadcast pending transactions")));
+        paths.put("/api/peers/{peerId}/health", Map.of("get", operation("Check peer health")));
         paths.put("/api/peers/{peerId}/chain", Map.of("get", operation("Fetch a peer chain")));
+        paths.put("/api/peers/{peerId}", Map.of("delete", operation("Remove a peer")));
         paths.put("/api/peers/{peerId}/blocks", Map.of("post", operation("Mine a demo block on a peer")));
         paths.put("/api/peers/{peerId}/sync", Map.of("post", operation("Sync from a peer")));
         paths.put("/api/docs/openapi", Map.of("get", operation("View this OpenAPI document")));
