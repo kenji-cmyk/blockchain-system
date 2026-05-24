@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -27,6 +28,11 @@ class BackendApplicationTests {
 
     @BeforeEach
     void resetChain() throws Exception {
+        mockMvc.perform(put("/api/chain/difficulty")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"difficulty\":2}"))
+                .andExpect(status().isOk());
+
         mockMvc.perform(post("/api/chain/reset"))
                 .andExpect(status().isOk());
     }
@@ -41,13 +47,31 @@ class BackendApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].index").value(0))
+                .andExpect(jsonPath("$[0].hash").isNotEmpty())
                 .andExpect(jsonPath("$[0].transactions", hasSize(1)))
+                .andExpect(jsonPath("$[0].transactions[0].sender").value("SYSTEM"))
                 .andExpect(jsonPath("$[0].transactions[0].receiver").value("GENESIS"))
+                .andExpect(jsonPath("$[0].transactions[0].amount").value(10.0))
                 .andExpect(jsonPath("$[0].previousHash").value("0"));
     }
 
     @Test
-    void canAddBlockAndValidateChain() throws Exception {
+    void canViewBlockByIndex() throws Exception {
+        mockMvc.perform(get("/api/blocks/0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.index").value(0))
+                .andExpect(jsonPath("$.previousHash").value("0"))
+                .andExpect(jsonPath("$.transactions[0].receiver").value("GENESIS"));
+    }
+
+    @Test
+    void unknownBlockIndexReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/blocks/99"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void canAddLegacyDemoBlockAndValidateChain() throws Exception {
         mockMvc.perform(post("/api/blocks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"data\":\"Learn block hash\"}"))
@@ -58,6 +82,26 @@ class BackendApplicationTests {
         mockMvc.perform(get("/api/chain/validate"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.difficulty").value(2))
+                .andExpect(jsonPath("$.pendingTransactions").value(0))
+                .andExpect(jsonPath("$.valid").value(true));
+    }
+
+    @Test
+    void addLegacyDemoBlockRejectsBlankData() throws Exception {
+        mockMvc.perform(post("/api/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"data\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void chainStatusReportsSizeDifficultyPendingAndValidity() throws Exception {
+        mockMvc.perform(get("/api/chain/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.difficulty").value(2))
+                .andExpect(jsonPath("$.pendingTransactions").value(0))
                 .andExpect(jsonPath("$.valid").value(true));
     }
 
@@ -67,7 +111,16 @@ class BackendApplicationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"difficulty\":2}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.difficulty").value(2));
+                .andExpect(jsonPath("$.difficulty").value(2))
+                .andExpect(jsonPath("$.valid").value(true));
+    }
+
+    @Test
+    void rejectsDifficultyOutsideDemoRange() throws Exception {
+        mockMvc.perform(put("/api/chain/difficulty")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"difficulty\":7}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -93,9 +146,67 @@ class BackendApplicationTests {
     }
 
     @Test
-    void canCreateSignedTransactionAndMineReward() throws Exception {
+    void tamperRejectsUnknownBlockIndex() throws Exception {
+        mockMvc.perform(post("/api/chain/tamper")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"index\":42,\"data\":\"Changed data\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createsWalletsWithDistinctKeys() throws Exception {
+        JsonObject firstWallet = createWallet();
+        JsonObject secondWallet = createWallet();
+
+        mockMvc.perform(get("/api/wallets/new"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.publicKey").isNotEmpty())
+                .andExpect(jsonPath("$.privateKey").isNotEmpty());
+
+        org.hamcrest.MatcherAssert.assertThat(
+                firstWallet.get("publicKey").getAsString(),
+                not(secondWallet.get("publicKey").getAsString())
+        );
+        org.hamcrest.MatcherAssert.assertThat(
+                firstWallet.get("privateKey").getAsString(),
+                not(secondWallet.get("privateKey").getAsString())
+        );
+    }
+
+    @Test
+    void startsWithNoPendingTransactions() throws Exception {
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void canCreateSignedTransactionAndViewPendingPool() throws Exception {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 5)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sender").value(senderWallet.get("publicKey").getAsString()))
+                .andExpect(jsonPath("$.receiver").value(receiverWallet.get("publicKey").getAsString()))
+                .andExpect(jsonPath("$.amount").value(5.0))
+                .andExpect(jsonPath("$.signature").isNotEmpty())
+                .andExpect(jsonPath("$.transactionId").isNotEmpty());
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].receiver").value(receiverWallet.get("publicKey").getAsString()))
+                .andExpect(jsonPath("$[0].amount").value(5.0));
+    }
+
+    @Test
+    void rejectsTransactionWithWrongPrivateKey() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        JsonObject unrelatedWallet = createWallet();
 
         String requestJson = """
                 {
@@ -107,12 +218,48 @@ class BackendApplicationTests {
                 """.formatted(
                 senderWallet.get("publicKey").getAsString(),
                 receiverWallet.get("publicKey").getAsString(),
-                senderWallet.get("privateKey").getAsString()
+                unrelatedWallet.get("privateKey").getAsString()
         );
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void rejectsTransactionWithInvalidAmount() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 0)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsMiningWhenThereAreNoPendingTransactions() throws Exception {
+        JsonObject minerWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions/mine")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mineJson(minerWallet)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void canCreateSignedTransactionMineRewardAndValidateChain() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 5)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(5.0))
                 .andExpect(jsonPath("$.signature").isNotEmpty());
@@ -121,15 +268,9 @@ class BackendApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pendingTransactions").value(1));
 
-        String mineRequestJson = """
-                {
-                  "rewardAddress": "%s"
-                }
-                """.formatted(senderWallet.get("publicKey").getAsString());
-
         mockMvc.perform(post("/api/transactions/mine")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(mineRequestJson))
+                        .content(mineJson(senderWallet)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.index").value(1))
                 .andExpect(jsonPath("$.transactions", hasSize(2)))
@@ -144,6 +285,35 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.valid").value(true));
     }
 
+    @Test
+    void resetClearsPendingTransactionsAndRestoresGenesisOnlyChain() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 3)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/chain/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingTransactions").value(1));
+
+        mockMvc.perform(post("/api/chain/reset"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Blockchain reset with a new genesis block"));
+
+        mockMvc.perform(get("/api/chain/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.pendingTransactions").value(0))
+                .andExpect(jsonPath("$.valid").value(true));
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
     private JsonObject createWallet() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/wallets/new"))
                 .andExpect(status().isOk())
@@ -152,6 +322,30 @@ class BackendApplicationTests {
                 .andReturn();
 
         return JsonParser.parseString(result.getResponse().getContentAsString()).getAsJsonObject();
+    }
+
+    private String transactionJson(JsonObject senderWallet, JsonObject receiverWallet, double amount) {
+        return """
+                {
+                  "sender": "%s",
+                  "receiver": "%s",
+                  "amount": %s,
+                  "privateKey": "%s"
+                }
+                """.formatted(
+                senderWallet.get("publicKey").getAsString(),
+                receiverWallet.get("publicKey").getAsString(),
+                amount,
+                senderWallet.get("privateKey").getAsString()
+        );
+    }
+
+    private String mineJson(JsonObject wallet) {
+        return """
+                {
+                  "rewardAddress": "%s"
+                }
+                """.formatted(wallet.get("publicKey").getAsString());
     }
 
 }
