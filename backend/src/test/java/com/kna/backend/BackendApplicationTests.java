@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
@@ -29,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +58,16 @@ class BackendApplicationTests {
 
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void servesClientExperience() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("LuminousChain Client")))
+                .andExpect(content().string(containsString("id=\"blockTimeline\"")))
+                .andExpect(content().string(containsString("id=\"transactionForm\"")))
+                .andExpect(content().string(containsString("id=\"peerForm\"")));
     }
 
     @Test
@@ -526,6 +538,16 @@ class BackendApplicationTests {
 
     @Test
     void exposesOperationsHealthMetricsAndRequestTracing() throws Exception {
+        MvcResult statusResult = mockMvc.perform(get("/api/chain/status"))
+                .andExpect(status().isOk())
+                .andReturn();
+        int cumulativeDifficulty = JsonParser.parseString(
+                        statusResult.getResponse().getContentAsString()
+                )
+                .getAsJsonObject()
+                .get("cumulativeDifficulty")
+                .getAsInt();
+
         mockMvc.perform(get("/api/ops/health")
                         .header("X-Request-Id", "test-request-id"))
                 .andExpect(status().isOk())
@@ -538,7 +560,7 @@ class BackendApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.chainSize").value(1))
                 .andExpect(jsonPath("$.pendingTransactions").value(0))
-                .andExpect(jsonPath("$.cumulativeDifficulty").value(4))
+                .andExpect(jsonPath("$.cumulativeDifficulty").value(cumulativeDifficulty))
                 .andExpect(jsonPath("$.peers").value(0));
     }
 

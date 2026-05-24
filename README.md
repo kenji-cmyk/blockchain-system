@@ -37,6 +37,7 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Provides local, test, and docker application profiles.
 - Exposes operations health and metrics APIs.
 - Adds request tracing with `X-Request-Id`.
+- Serves a responsive luminous dark web UI for chain browsing, wallets, transactions, mining, and peer sync demos.
 - Includes CI workflow for backend tests and Docker image build.
 - Includes Docker and Docker Compose setup.
 - Includes MockMvc tests for all current APIs.
@@ -65,6 +66,7 @@ Key areas:
 - `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
 - `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, balance, and peer sync logic.
 - `backend/src/main/java/com/kna/backend/controller`: REST API controllers and error handling.
+- `backend/src/main/resources/static`: browser client for the Phase 5 client experience.
 - `backend/src/test`: API tests.
 
 ## Technology Stack
@@ -102,6 +104,12 @@ The API runs at:
 
 ```text
 http://localhost:8080
+```
+
+The web client runs from the same Spring Boot app at:
+
+```text
+http://localhost:8080/
 ```
 
 Run the test suite:
@@ -173,17 +181,12 @@ Completed:
 - Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
 - Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
 - Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
+- Phase 5: responsive web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos.
 - API tests for all current endpoints.
 
 ## Future Plan
 
-### Phase 5: Add Client Experience
-
-- Build a small web UI for chain browsing.
-- Add wallet creation and transaction submission screens.
-- Show wallet balances, pending outgoing transactions, fees, and miner rewards.
-- Show mining progress, nonce count, and chain validity.
-- Visualize peer chains and conflict resolution.
+The core learning roadmap through Phase 5 is complete. Future work can move toward a UTXO model, richer peer visualization, authenticated admin controls, or a dedicated frontend build if the client grows beyond a lightweight embedded UI.
 
 ## Notes
 

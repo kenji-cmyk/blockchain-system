@@ -18,6 +18,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
 - Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
+- Client: Spring Boot serves a lightweight luminous dark UI for exploring the chain, wallets, transactions, mining, and peer sync.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
@@ -42,6 +43,12 @@ By default, the API runs at:
 
 ```text
 http://localhost:8080
+```
+
+The browser client is served from the same app:
+
+```text
+http://localhost:8080/
 ```
 
 Run tests:
@@ -451,6 +458,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/ApiExceptionHandler.java`: unified API error responses.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
+- `resources/static/`: Phase 5 browser client assets.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
@@ -523,6 +531,14 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - [x] Add health endpoints and metrics.
 - [x] Add structured logs and request tracing.
 - [x] Add CI workflow for tests and Docker build.
+
+### Phase 5: Add Client Experience
+
+- [x] Build a small web UI for chain browsing.
+- [x] Add wallet creation and transaction submission screens.
+- [x] Show wallet balances, pending outgoing transactions, fees, and miner rewards.
+- [x] Show mining progress, nonce count, and chain validity.
+- [x] Visualize peer chains and conflict resolution.
 
 ### Section D: Code Quality and Observability
 
