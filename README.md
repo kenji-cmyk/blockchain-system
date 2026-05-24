@@ -1,215 +1,129 @@
-# Blockchain Learning Backend
+# Blockchain System
 
-This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, a pending transaction pool, and mining rewards.
+Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, transactions, wallets, digital signatures, a pending transaction pool, and mining rewards.
 
-## Current Status
+This is not a production blockchain. The project intentionally keeps the architecture small, uses in-memory storage, and exposes simple APIs so the system is easy to test, reset, and extend step by step.
 
-- Runtime: Java 25, Spring Boot 4.0.6, Maven.
-- Storage: in-memory. Restarting the app clears the chain and pending transactions.
-- Block data: each block contains a list of `Transaction` objects.
-- Wallets: generated RSA public/private key pairs returned as Base64 strings.
-- Transactions: sender, receiver, amount, timestamp, transaction id, and digital signature.
-- Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, and every transaction signature must be valid.
-- Genesis block: created automatically on startup and when the reset API is called.
-- Default difficulty: `blockchain.difficulty=3`.
-- Default mining reward: `blockchain.mining-reward=10`.
+## Features
+
+- Automatically creates a genesis block on startup and after chain resets.
+- Stores the blockchain in memory.
+- Mines blocks with proof-of-work.
+- Supports configurable mining difficulty.
+- Validates block hashes, previous hash links, proof-of-work difficulty, and transaction signatures.
+- Generates wallets as RSA public/private key pairs.
+- Creates transactions with sender, receiver, and amount.
+- Signs transactions with private keys.
+- Verifies transactions with public keys.
+- Keeps new transactions in a pending transaction pool.
+- Mines pending transactions into a new block.
+- Adds a mining reward transaction for the miner.
+- Provides a tamper API to intentionally invalidate the chain for learning.
+- Includes MockMvc API tests for all current endpoints.
+
+## Project Structure
+
+```text
+blockchain-system/
+├── README.md
+└── backend/
+    ├── README.md
+    ├── pom.xml
+    └── src/
+        ├── main/
+        │   ├── java/com/kna/backend/
+        │   └── resources/
+        └── test/
+```
+
+Key areas:
+
+- `backend/`: Spring Boot REST API containing the current blockchain implementation.
+- `backend/README.md`: detailed backend documentation, API examples, and technical roadmap.
+- `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
+- `backend/src/main/java/com/kna/backend/service`: chain management, pending pool, mining, and validation logic.
+- `backend/src/main/java/com/kna/backend/controller`: REST API controller.
+- `backend/src/test`: API tests.
+
+## Technology Stack
+
+- Java 25
+- Spring Boot 4.0.6
+- Maven
+- Gson
+- JUnit and Spring MockMvc
+- Java Security API for RSA signatures and SHA-256 hashing
 
 ## Running the Project
+
+Go to the backend directory:
+
+```bash
+cd backend
+```
+
+Run the application:
 
 ```bash
 mvn spring-boot:run
 ```
 
-By default, the API runs at:
+The API runs at:
 
 ```text
 http://localhost:8080
 ```
 
-Run tests:
+Run the test suite:
 
 ```bash
 mvn test
 ```
 
-## API
+## Main APIs
 
-### View the Entire Chain
+Important endpoints:
 
-```http
-GET /api/blocks
-```
+- `GET /api/blocks`: view the full chain.
+- `GET /api/blocks/{index}`: view a block by index.
+- `GET /api/wallets/new`: create a wallet.
+- `POST /api/transactions`: create and sign a transaction.
+- `GET /api/transactions/pending`: view the pending transaction pool.
+- `POST /api/transactions/mine`: mine pending transactions.
+- `GET /api/chain/status`: view chain status.
+- `GET /api/chain/validate`: validate the chain.
+- `PUT /api/chain/difficulty`: update mining difficulty.
+- `POST /api/chain/tamper`: intentionally tamper with a block.
+- `POST /api/chain/reset`: reset the chain.
 
-### View a Block by Index
+Basic workflow:
 
-```http
-GET /api/blocks/{index}
-```
+1. Call `GET /api/wallets/new` twice to create sender and receiver wallets.
+2. Call `POST /api/transactions` with the sender public key, receiver public key, amount, and sender private key.
+3. Call `GET /api/transactions/pending` to confirm the transaction is waiting to be mined.
+4. Call `POST /api/transactions/mine` with the miner reward address.
+5. Call `GET /api/chain/validate` to confirm the chain is still valid.
 
-### Create a Wallet
+## Roadmap Status
 
-```http
-GET /api/wallets/new
-```
+Completed:
 
-The response contains a `publicKey` and `privateKey`. The `publicKey` is also used as the wallet address in this demo.
+- Section A: basic blockchain, genesis block, add block, SHA-256 hash, nonce, proof-of-work, validation, tamper API, reset API, and difficulty API.
+- Section B: transactions, wallets, transaction signing and verification, pending transaction pool, and mining rewards.
+- API tests for all current endpoints.
 
-### Create a Signed Transaction
+Planned next:
 
-This creates a transaction, signs it with the sender private key, verifies the signature, and adds it to the pending transaction pool.
+- Simulate multiple nodes.
+- Add peer registration.
+- Synchronize chains between peers.
+- Resolve conflicts by choosing the longer valid chain.
+- Standardize error responses.
+- Add OpenAPI/Swagger documentation.
+- Log mining time and nonce count.
+- Add optional database persistence.
+- Add Dockerfile and docker-compose.
 
-```http
-POST /api/transactions
-Content-Type: application/json
+## Notes
 
-{
-  "sender": "BASE64_PUBLIC_KEY",
-  "receiver": "BASE64_PUBLIC_KEY",
-  "amount": 5,
-  "privateKey": "BASE64_PRIVATE_KEY"
-}
-```
-
-### View Pending Transactions
-
-```http
-GET /api/transactions/pending
-```
-
-### Mine Pending Transactions
-
-This mines all pending transactions into a new block and adds a mining reward transaction for the given reward address.
-
-```http
-POST /api/transactions/mine
-Content-Type: application/json
-
-{
-  "rewardAddress": "BASE64_PUBLIC_KEY"
-}
-```
-
-### Validate the Chain
-
-```http
-GET /api/chain/validate
-```
-
-Example response:
-
-```json
-{
-  "size": 2,
-  "difficulty": 3,
-  "pendingTransactions": 0,
-  "valid": true
-}
-```
-
-### View Chain Status
-
-```http
-GET /api/chain/status
-```
-
-### Adjust Difficulty
-
-```http
-PUT /api/chain/difficulty
-Content-Type: application/json
-
-{
-  "difficulty": 2
-}
-```
-
-The difficulty is limited from `0` to `6` to avoid very long mining times in this demo. If the difficulty is increased above the level used for previously mined blocks, the existing chain may become invalid. This is intentional because it shows how changing consensus rules affects validation.
-
-### Tamper With the Chain
-
-This endpoint intentionally changes a block marker without re-mining it. After calling it, validation should usually return `false`.
-
-```http
-POST /api/chain/tamper
-Content-Type: application/json
-
-{
-  "index": 1,
-  "data": "Tampered data"
-}
-```
-
-### Reset the Chain
-
-This clears the chain and pending transaction pool, then creates a new genesis block.
-
-```http
-POST /api/chain/reset
-```
-
-### Legacy Demo Block Endpoint
-
-This endpoint is kept for the basic learning flow from section A. It mines a new block with a tiny system transaction whose receiver is the supplied text.
-
-```http
-POST /api/blocks
-Content-Type: application/json
-
-{
-  "data": "Learn block hash"
-}
-```
-
-## Code Structure
-
-- `entity/Block.java`: block model, transaction list, hash calculation, mining, and tamper marker.
-- `entity/Transaction.java`: transaction model, signing, signature verification, and mining reward transactions.
-- `entity/Wallet.java`: public/private key pair response model.
-- `service/BlockchainService.java`: in-memory chain, pending transaction pool, block mining, validation, difficulty, and reset logic.
-- `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
-- `pkg/utils/StringUtil.java`: SHA-256 helper.
-- `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
-- `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
-- `dto/*`: request/response records for the API.
-- `BackendApplicationTests.java`: MockMvc tests for block, chain, wallet, transaction, and mining workflows.
-
-## Roadmap
-
-### Section A: Basic Blockchain
-
-- [x] In-memory blockchain.
-- [x] Genesis block.
-- [x] Add block with demo text data.
-- [x] SHA-256 hash.
-- [x] Nonce and proof-of-work mining.
-- [x] Validate hash, previous hash, and difficulty.
-- [x] API to view blocks, add a demo block, validate, tamper, and reset.
-- [x] API to adjust difficulty.
-- [x] Main API tests.
-
-### Section B: Transactions and Wallets
-
-- [x] Create a `Transaction` model with sender, receiver, and amount.
-- [x] Create wallets with public/private keys.
-- [x] Sign transactions with private keys.
-- [x] Verify signatures with public keys.
-- [x] Change block data from a string to a transaction list.
-- [x] Add a pending transaction pool.
-- [x] Add a basic mining reward.
-
-### Section C: Simple Nodes and Sync
-
-- [ ] Simulate multiple nodes in the same app or through multiple instances.
-- [ ] API to register peers.
-- [ ] API to fetch a chain from a peer.
-- [ ] Rule to choose the longer valid chain.
-- [ ] Conflict resolution demo.
-
-### Section D: Code Quality and Observability
-
-- [ ] Add a unified exception response format.
-- [ ] Add request validation annotations.
-- [ ] Add OpenAPI/Swagger.
-- [ ] Add mining time and nonce count logs.
-- [ ] Add optional database persistence.
-- [ ] Add Dockerfile and docker-compose.
+The current system uses in-memory storage, so blocks and pending transactions are lost when the application restarts. This is intentional for the learning stage because it makes the project quick to reset and easy to experiment with.
