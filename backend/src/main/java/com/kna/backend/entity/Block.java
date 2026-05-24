@@ -3,30 +3,38 @@ package com.kna.backend.entity;
 import com.kna.backend.pkg.utils.StringUtil;
 
 import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class Block {
 
     private final int index;
     private String hash;
     private final String previousHash;
-    private String data;
+    private final List<Transaction> transactions;
     private final long timeStamp;
     private int nonce;
+    private String tamperMarker = "";
 
-    public Block(int index, String data, String previousHash) {
+    public Block(int index, List<Transaction> transactions, String previousHash) {
         this.index = index;
-        this.data = data;
+        this.transactions = List.copyOf(transactions);
         this.previousHash = previousHash;
         this.timeStamp = new Date().getTime();
         this.hash = calculateHash();
     }
 
     public String calculateHash() {
+        String transactionHash = transactions.stream()
+                .map(Transaction::getTransactionId)
+                .collect(Collectors.joining("|"));
+
         return StringUtil.applySha256(
                 previousHash
                         + timeStamp
                         + nonce
-                        + data
+                        + transactionHash
+                        + tamperMarker
         );
     }
 
@@ -43,7 +51,7 @@ public class Block {
     }
 
     public void tamperData(String data) {
-        this.data = data;
+        this.tamperMarker = data;
     }
 
     public int getIndex() {
@@ -58,8 +66,8 @@ public class Block {
         return previousHash;
     }
 
-    public String getData() {
-        return data;
+    public List<Transaction> getTransactions() {
+        return transactions;
     }
 
     public long getTimeStamp() {
@@ -68,5 +76,9 @@ public class Block {
 
     public int getNonce() {
         return nonce;
+    }
+
+    public String getTamperMarker() {
+        return tamperMarker;
     }
 }

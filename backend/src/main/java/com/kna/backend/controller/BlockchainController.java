@@ -3,9 +3,13 @@ package com.kna.backend.controller;
 import com.kna.backend.dto.AddBlockRequest;
 import com.kna.backend.dto.ApiMessage;
 import com.kna.backend.dto.BlockchainStatus;
+import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
+import com.kna.backend.dto.MineTransactionsRequest;
 import com.kna.backend.dto.TamperBlockRequest;
 import com.kna.backend.entity.Block;
+import com.kna.backend.entity.Transaction;
+import com.kna.backend.entity.Wallet;
 import com.kna.backend.service.BlockchainService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,6 +58,41 @@ public class BlockchainController {
         }
     }
 
+    @GetMapping("/wallets/new")
+    public Wallet createWallet() {
+        return blockchainService.createWallet();
+    }
+
+    @GetMapping("/transactions/pending")
+    public List<Transaction> getPendingTransactions() {
+        return blockchainService.getPendingTransactions();
+    }
+
+    @PostMapping("/transactions")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Transaction createTransaction(@RequestBody CreateTransactionRequest request) {
+        try {
+            return blockchainService.createTransaction(
+                    request.sender(),
+                    request.receiver(),
+                    request.amount(),
+                    request.privateKey()
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/transactions/mine")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Block minePendingTransactions(@RequestBody MineTransactionsRequest request) {
+        try {
+            return blockchainService.minePendingTransactions(request.rewardAddress());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
     @GetMapping("/chain/validate")
     public BlockchainStatus validateChain() {
         return getStatus();
@@ -64,6 +103,7 @@ public class BlockchainController {
         return new BlockchainStatus(
                 blockchainService.getBlocks().size(),
                 blockchainService.getDifficulty(),
+                blockchainService.getPendingTransactions().size(),
                 blockchainService.isValid()
         );
     }

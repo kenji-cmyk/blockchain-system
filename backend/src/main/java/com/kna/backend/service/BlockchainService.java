@@ -1,6 +1,9 @@
 package com.kna.backend.service;
 
 import com.kna.backend.entity.Block;
+import com.kna.backend.entity.Transaction;
+import com.kna.backend.entity.Wallet;
+import com.kna.backend.pkg.utils.CryptoUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +16,15 @@ import static com.kna.backend.pkg.validate.Validator.isChainValid;
 public class BlockchainService {
 
     private final List<Block> blockchain = new ArrayList<>();
+    private final List<Transaction> pendingTransactions = new ArrayList<>();
     private int difficulty;
+    private final double miningReward;
 
-    public BlockchainService(@Value("${blockchain.difficulty:3}") int difficulty) {
+    public BlockchainService(
+            @Value("${blockchain.difficulty:3}") int difficulty,
+            @Value("${blockchain.mining-reward:10}") double miningReward
+    ) {
+        this.miningReward = miningReward;
         setDifficulty(difficulty);
         reset();
     }
@@ -33,10 +42,42 @@ public class BlockchainService {
 
     public synchronized Block addBlock(String data) {
         validateData(data);
-        Block previousBlock = blockchain.getLast();
-        Block block = new Block(blockchain.size(), data, previousBlock.getHash());
-        block.mineBlock(difficulty);
-        blockchain.add(block);
+        Transaction transaction = Transaction.miningReward(data, 0.00000001);
+        return mineTransactions(List.of(transaction));
+    }
+
+    public Wallet createWallet() {
+        return CryptoUtil.generateWallet();
+    }
+
+    public synchronized Transaction createTransaction(String sender, String receiver, double amount, String privateKey) {
+        validateTransactionInput(sender, receiver, amount, privateKey);
+
+        Transaction transaction = new Transaction(sender, receiver, amount);
+        transaction.sign(privateKey);
+
+        if (!transaction.isValid()) {
+            throw new IllegalArgumentException("Transaction signature is invalid");
+        }
+
+        pendingTransactions.add(transaction);
+        return transaction;
+    }
+
+    public synchronized List<Transaction> getPendingTransactions() {
+        return List.copyOf(pendingTransactions);
+    }
+
+    public synchronized Block minePendingTransactions(String rewardAddress) {
+        validateData(rewardAddress);
+        if (pendingTransactions.isEmpty()) {
+            throw new IllegalArgumentException("There are no pending transactions to mine");
+        }
+
+        List<Transaction> transactionsToMine = new ArrayList<>(pendingTransactions);
+        transactionsToMine.add(Transaction.miningReward(rewardAddress, miningReward));
+        Block block = mineTransactions(transactionsToMine);
+        pendingTransactions.clear();
         return block;
     }
 
@@ -51,7 +92,8 @@ public class BlockchainService {
 
     public synchronized void reset() {
         blockchain.clear();
-        Block genesisBlock = new Block(0, "Genesis Block", "0");
+        pendingTransactions.clear();
+        Block genesisBlock = new Block(0, List.of(Transaction.miningReward("GENESIS", miningReward)), "0");
         genesisBlock.mineBlock(difficulty);
         blockchain.add(genesisBlock);
     }
@@ -70,6 +112,29 @@ public class BlockchainService {
     private void validateData(String data) {
         if (data == null || data.isBlank()) {
             throw new IllegalArgumentException("Block data must not be blank");
+        }
+    }
+
+    private Block mineTransactions(List<Transaction> transactions) {
+        for (Transaction transaction : transactions) {
+            if (!transaction.isValid()) {
+                throw new IllegalArgumentException("Block contains an invalid transaction");
+            }
+        }
+
+        Block previousBlock = blockchain.getLast();
+        Block block = new Block(blockchain.size(), transactions, previousBlock.getHash());
+        block.mineBlock(difficulty);
+        blockchain.add(block);
+        return block;
+    }
+
+    private void validateTransactionInput(String sender, String receiver, double amount, String privateKey) {
+        validateData(sender);
+        validateData(receiver);
+        validateData(privateKey);
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Transaction amount must be greater than 0");
         }
     }
 }

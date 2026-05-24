@@ -24,6 +24,10 @@ public class Validator {
             if (!expectedPreviousHash.equals(currentBlock.getPreviousHash())) {
                 return false;
             }
+
+            if (currentBlock.getTransactions().stream().anyMatch(transaction -> !transaction.isValid())) {
+                return false;
+            }
         }
 
         return true;
