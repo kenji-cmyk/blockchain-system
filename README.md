@@ -1,32 +1,36 @@
 # Blockchain System
 
-Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, transactions, wallets, digital signatures, a pending transaction pool, and mining rewards.
+Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, transactions, wallets, digital signatures, pending transactions, mining rewards, simulated peers, and basic chain synchronization.
 
-This is not a production blockchain. The project intentionally keeps the architecture small, uses in-memory storage, and exposes simple APIs so the system is easy to test, reset, and extend step by step.
+This is not a production blockchain. The project intentionally keeps the architecture small and observable so each concept can be tested, broken, reset, and extended step by step.
 
 ## Features
 
-- Automatically creates a genesis block on startup and after chain resets.
-- Stores the blockchain in memory.
-- Mines blocks with proof-of-work.
-- Supports configurable mining difficulty.
-- Validates block hashes, previous hash links, proof-of-work difficulty, and transaction signatures.
+- Creates a genesis block on startup and after chain resets.
+- Mines blocks with proof-of-work and configurable difficulty.
+- Validates block hashes, previous hash links, difficulty, and transaction signatures.
 - Generates wallets as RSA public/private key pairs.
-- Creates transactions with sender, receiver, and amount.
-- Signs transactions with private keys.
-- Verifies transactions with public keys.
-- Keeps new transactions in a pending transaction pool.
-- Mines pending transactions into a new block.
-- Adds a mining reward transaction for the miner.
-- Provides a tamper API to intentionally invalidate the chain for learning.
-- Includes MockMvc API tests for all current endpoints.
+- Creates and signs transactions.
+- Stores new transactions in a pending transaction pool.
+- Mines pending transactions into new blocks with miner rewards.
+- Simulates peer nodes inside the same app.
+- Resolves conflicts by adopting a longer valid peer chain.
+- Exposes a tamper API for validation demos.
+- Returns unified JSON error responses.
+- Exposes an OpenAPI JSON document at `GET /api/docs/openapi`.
+- Logs mining time and nonce count.
+- Supports optional file or H2 database persistence.
+- Includes Docker and Docker Compose setup.
+- Includes MockMvc tests for all current APIs.
 
 ## Project Structure
 
 ```text
 blockchain-system/
 ├── README.md
+├── docker-compose.yml
 └── backend/
+    ├── Dockerfile
     ├── README.md
     ├── pom.xml
     └── src/
@@ -38,11 +42,11 @@ blockchain-system/
 
 Key areas:
 
-- `backend/`: Spring Boot REST API containing the current blockchain implementation.
-- `backend/README.md`: detailed backend documentation, API examples, and technical roadmap.
+- `backend/`: Spring Boot REST API containing the blockchain implementation.
+- `backend/README.md`: detailed backend documentation, API examples, configuration, and roadmap.
 - `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
-- `backend/src/main/java/com/kna/backend/service`: chain management, pending pool, mining, and validation logic.
-- `backend/src/main/java/com/kna/backend/controller`: REST API controller.
+- `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, and peer sync logic.
+- `backend/src/main/java/com/kna/backend/controller`: REST API controllers and error handling.
 - `backend/src/test`: API tests.
 
 ## Technology Stack
@@ -51,7 +55,9 @@ Key areas:
 - Spring Boot 4.0.6
 - Maven
 - Gson
+- H2 database
 - JUnit and Spring MockMvc
+- Docker and Docker Compose
 - Java Security API for RSA signatures and SHA-256 hashing
 
 ## Running the Project
@@ -60,6 +66,12 @@ Go to the backend directory:
 
 ```bash
 cd backend
+```
+
+Create a local config file:
+
+```bash
+cp src/main/resources/application-example.properties src/main/resources/application.properties
 ```
 
 Run the application:
@@ -80,6 +92,12 @@ Run the test suite:
 mvn test
 ```
 
+Run with Docker Compose from the repository root:
+
+```bash
+docker compose up --build
+```
+
 ## Main APIs
 
 Important endpoints:
@@ -94,36 +112,67 @@ Important endpoints:
 - `GET /api/chain/validate`: validate the chain.
 - `PUT /api/chain/difficulty`: update mining difficulty.
 - `POST /api/chain/tamper`: intentionally tamper with a block.
-- `POST /api/chain/reset`: reset the chain.
+- `POST /api/chain/reset`: reset chain state.
+- `POST /api/peers`: register a simulated peer.
+- `GET /api/peers`: list simulated peers.
+- `GET /api/peers/{peerId}/chain`: fetch a peer chain.
+- `POST /api/peers/{peerId}/blocks`: mine a demo block on a peer.
+- `POST /api/peers/{peerId}/sync`: sync from a peer.
+- `GET /api/docs/openapi`: view the OpenAPI document.
 
-Basic workflow:
-
-1. Call `GET /api/wallets/new` twice to create sender and receiver wallets.
-2. Call `POST /api/transactions` with the sender public key, receiver public key, amount, and sender private key.
-3. Call `GET /api/transactions/pending` to confirm the transaction is waiting to be mined.
-4. Call `POST /api/transactions/mine` with the miner reward address.
-5. Call `GET /api/chain/validate` to confirm the chain is still valid.
-
-## Roadmap Status
+## Current Status
 
 Completed:
 
-- Section A: basic blockchain, genesis block, add block, SHA-256 hash, nonce, proof-of-work, validation, tamper API, reset API, and difficulty API.
+- Section A: basic blockchain, genesis block, SHA-256 hashes, nonce, proof-of-work, validation, tamper API, reset API, and difficulty API.
 - Section B: transactions, wallets, transaction signing and verification, pending transaction pool, and mining rewards.
+- Section C: simulated peers, peer registration, peer chain fetch, longer-valid-chain conflict resolution, and sync demo.
+- Section D: unified error responses, validation annotations, OpenAPI document, mining logs, optional persistence, Dockerfile, and Docker Compose.
 - API tests for all current endpoints.
 
-Planned next:
+## Future Plan
 
-- Simulate multiple nodes.
-- Add peer registration.
-- Synchronize chains between peers.
-- Resolve conflicts by choosing the longer valid chain.
-- Standardize error responses.
-- Add OpenAPI/Swagger documentation.
-- Log mining time and nonce count.
-- Add optional database persistence.
-- Add Dockerfile and docker-compose.
+### Phase 1: Make the Blockchain Model More Realistic
+
+- Add transaction fees and miner fee collection.
+- Add wallet balances derived from transaction history.
+- Reject transactions when the sender balance is insufficient.
+- Add a UTXO-style model or account-state model and document the tradeoffs.
+- Add block size or transaction count limits.
+
+### Phase 2: Improve Peer Networking
+
+- Move from in-app simulated peers to HTTP-based multi-instance peers.
+- Add peer health checks.
+- Add peer discovery and peer removal.
+- Broadcast pending transactions to peers.
+- Broadcast newly mined blocks to peers.
+- Add sync retry and timeout handling.
+
+### Phase 3: Strengthen Consensus and Validation
+
+- Validate complete transaction history, not only signatures.
+- Add chain cumulative difficulty instead of simple chain length.
+- Add fork handling and orphan block tracking.
+- Add mempool rules for duplicate transactions.
+- Add deterministic serialization for block hashes.
+
+### Phase 4: Improve Persistence and Operations
+
+- Persist blocks, transactions, wallets, peers, and mempool state in normalized tables.
+- Add database migrations.
+- Add application profiles for local, test, and docker.
+- Add health endpoints and metrics.
+- Add structured logs and request tracing.
+- Add CI workflow for tests and Docker build.
+
+### Phase 5: Add Client Experience
+
+- Build a small web UI for chain browsing.
+- Add wallet creation and transaction submission screens.
+- Show mining progress, nonce count, and chain validity.
+- Visualize peer chains and conflict resolution.
 
 ## Notes
 
-The current system uses in-memory storage, so blocks and pending transactions are lost when the application restarts. This is intentional for the learning stage because it makes the project quick to reset and easy to experiment with.
+`application.properties` is ignored by Git. Use `backend/src/main/resources/application-example.properties` as the template for local configuration.
