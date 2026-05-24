@@ -33,6 +33,20 @@ public class BlockchainService {
         return List.copyOf(blockchain);
     }
 
+    public synchronized boolean replaceChainIfLongerAndValid(List<Block> candidateChain) {
+        if (candidateChain == null || candidateChain.size() <= blockchain.size()) {
+            return false;
+        }
+        if (!isChainValid(candidateChain, difficulty)) {
+            return false;
+        }
+
+        blockchain.clear();
+        blockchain.addAll(candidateChain);
+        pendingTransactions.clear();
+        return true;
+    }
+
     public synchronized Block getBlock(int index) {
         if (index < 0 || index >= blockchain.size()) {
             throw new IllegalArgumentException("Block index does not exist");
@@ -100,6 +114,10 @@ public class BlockchainService {
 
     public synchronized int getDifficulty() {
         return difficulty;
+    }
+
+    public double getMiningReward() {
+        return miningReward;
     }
 
     public synchronized void setDifficulty(int difficulty) {

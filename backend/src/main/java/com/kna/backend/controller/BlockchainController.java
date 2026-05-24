@@ -5,12 +5,17 @@ import com.kna.backend.dto.ApiMessage;
 import com.kna.backend.dto.BlockchainStatus;
 import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
+import com.kna.backend.dto.MinePeerBlockRequest;
 import com.kna.backend.dto.MineTransactionsRequest;
+import com.kna.backend.dto.PeerSummary;
+import com.kna.backend.dto.RegisterPeerRequest;
+import com.kna.backend.dto.SyncResult;
 import com.kna.backend.dto.TamperBlockRequest;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.service.BlockchainService;
+import com.kna.backend.service.PeerNodeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,9 +34,11 @@ import java.util.List;
 public class BlockchainController {
 
     private final BlockchainService blockchainService;
+    private final PeerNodeService peerNodeService;
 
-    public BlockchainController(BlockchainService blockchainService) {
+    public BlockchainController(BlockchainService blockchainService, PeerNodeService peerNodeService) {
         this.blockchainService = blockchainService;
+        this.peerNodeService = peerNodeService;
     }
 
     @GetMapping("/blocks")
@@ -93,6 +100,52 @@ public class BlockchainController {
         }
     }
 
+    @PostMapping("/peers")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PeerSummary registerPeer(@RequestBody RegisterPeerRequest request) {
+        try {
+            return peerNodeService.registerPeer(request.peerId());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @GetMapping("/peers")
+    public List<PeerSummary> getPeers() {
+        return peerNodeService.getPeers();
+    }
+
+    @GetMapping("/peers/{peerId}/chain")
+    public List<Block> getPeerChain(@PathVariable String peerId) {
+        try {
+            return peerNodeService.getPeerChain(peerId);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/peers/{peerId}/blocks")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Block minePeerDemoBlock(
+            @PathVariable String peerId,
+            @RequestBody MinePeerBlockRequest request
+    ) {
+        try {
+            return peerNodeService.mineDemoBlock(peerId, request.minerAddress());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/peers/{peerId}/sync")
+    public SyncResult syncFromPeer(@PathVariable String peerId) {
+        try {
+            return peerNodeService.syncFromPeer(peerId);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage(), exception);
+        }
+    }
+
     @GetMapping("/chain/validate")
     public BlockchainStatus validateChain() {
         return getStatus();
@@ -131,6 +184,7 @@ public class BlockchainController {
     @PostMapping("/chain/reset")
     public ApiMessage resetChain() {
         blockchainService.reset();
+        peerNodeService.resetPeers();
         return new ApiMessage("Blockchain reset with a new genesis block");
     }
 }

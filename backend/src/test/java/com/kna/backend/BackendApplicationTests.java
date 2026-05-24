@@ -314,6 +314,113 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$", hasSize(0)));
     }
 
+    @Test
+    void startsWithNoRegisteredPeers() throws Exception {
+        mockMvc.perform(get("/api/peers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void canRegisterPeerAndFetchPeerChain() throws Exception {
+        mockMvc.perform(post("/api/peers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"peerId\":\"node-b\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.peerId").value("node-b"))
+                .andExpect(jsonPath("$.chainSize").value(1))
+                .andExpect(jsonPath("$.valid").value(true));
+
+        mockMvc.perform(get("/api/peers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].peerId").value("node-b"));
+
+        mockMvc.perform(get("/api/peers/node-b/chain"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].index").value(0))
+                .andExpect(jsonPath("$[0].transactions[0].receiver").value("GENESIS"));
+    }
+
+    @Test
+    void rejectsBlankPeerRegistrationAndUnknownPeerFetch() throws Exception {
+        mockMvc.perform(post("/api/peers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"peerId\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/peers/missing-node/chain"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void syncDoesNotAdoptPeerChainWhenItIsNotLonger() throws Exception {
+        registerPeer("node-b");
+
+        mockMvc.perform(post("/api/peers/node-b/sync"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.peerId").value("node-b"))
+                .andExpect(jsonPath("$.peerChainSize").value(1))
+                .andExpect(jsonPath("$.localChainSizeBefore").value(1))
+                .andExpect(jsonPath("$.localChainSizeAfter").value(1))
+                .andExpect(jsonPath("$.peerValid").value(true))
+                .andExpect(jsonPath("$.adopted").value(false));
+    }
+
+    @Test
+    void peerCanMineBlocksAndLocalNodeCanAdoptLongerValidChain() throws Exception {
+        JsonObject minerWallet = createWallet();
+        registerPeer("node-b");
+
+        mockMvc.perform(post("/api/peers/node-b/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(peerMineJson(minerWallet)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.index").value(1))
+                .andExpect(jsonPath("$.transactions[0].receiver").value(minerWallet.get("publicKey").getAsString()));
+
+        mockMvc.perform(post("/api/peers/node-b/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(peerMineJson(minerWallet)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.index").value(2));
+
+        mockMvc.perform(get("/api/peers/node-b/chain"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[2].previousHash").isNotEmpty());
+
+        mockMvc.perform(post("/api/peers/node-b/sync"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.peerChainSize").value(3))
+                .andExpect(jsonPath("$.localChainSizeBefore").value(1))
+                .andExpect(jsonPath("$.localChainSizeAfter").value(3))
+                .andExpect(jsonPath("$.peerValid").value(true))
+                .andExpect(jsonPath("$.adopted").value(true));
+
+        mockMvc.perform(get("/api/chain/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(3))
+                .andExpect(jsonPath("$.valid").value(true));
+    }
+
+    @Test
+    void resetClearsRegisteredPeers() throws Exception {
+        registerPeer("node-b");
+
+        mockMvc.perform(get("/api/peers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        mockMvc.perform(post("/api/chain/reset"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/peers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
     private JsonObject createWallet() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/wallets/new"))
                 .andExpect(status().isOk())
@@ -322,6 +429,13 @@ class BackendApplicationTests {
                 .andReturn();
 
         return JsonParser.parseString(result.getResponse().getContentAsString()).getAsJsonObject();
+    }
+
+    private void registerPeer(String peerId) throws Exception {
+        mockMvc.perform(post("/api/peers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"peerId\":\"%s\"}".formatted(peerId)))
+                .andExpect(status().isCreated());
     }
 
     private String transactionJson(JsonObject senderWallet, JsonObject receiverWallet, double amount) {
@@ -344,6 +458,14 @@ class BackendApplicationTests {
         return """
                 {
                   "rewardAddress": "%s"
+                }
+                """.formatted(wallet.get("publicKey").getAsString());
+    }
+
+    private String peerMineJson(JsonObject wallet) {
+        return """
+                {
+                  "minerAddress": "%s"
                 }
                 """.formatted(wallet.get("publicKey").getAsString());
     }

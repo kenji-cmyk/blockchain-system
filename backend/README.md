@@ -1,6 +1,6 @@
 # Blockchain Learning Backend
 
-This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, a pending transaction pool, and mining rewards.
+This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, a pending transaction pool, mining rewards, peer nodes, and basic chain synchronization.
 
 ## Current Status
 
@@ -11,6 +11,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Transactions: sender, receiver, amount, timestamp, transaction id, and digital signature.
 - Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, and every transaction signature must be valid.
 - Genesis block: created automatically on startup and when the reset API is called.
+- Peer sync: simulated peers run inside the same application. A peer has its own in-memory chain and can be used to demo conflict resolution without starting multiple app instances.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 
@@ -147,6 +148,78 @@ This clears the chain and pending transaction pool, then creates a new genesis b
 POST /api/chain/reset
 ```
 
+### Register a Simulated Peer
+
+This creates a peer node inside the same application and initializes its chain from the current local chain.
+
+```http
+POST /api/peers
+Content-Type: application/json
+
+{
+  "peerId": "node-b"
+}
+```
+
+### View Registered Peers
+
+```http
+GET /api/peers
+```
+
+Example response:
+
+```json
+[
+  {
+    "peerId": "node-b",
+    "chainSize": 1,
+    "valid": true
+  }
+]
+```
+
+### Fetch a Peer Chain
+
+```http
+GET /api/peers/{peerId}/chain
+```
+
+### Mine a Demo Block on a Peer
+
+This mines a reward-only block on the selected simulated peer. It is useful for making the peer chain longer than the local chain so conflict resolution can be tested.
+
+```http
+POST /api/peers/{peerId}/blocks
+Content-Type: application/json
+
+{
+  "minerAddress": "BASE64_PUBLIC_KEY"
+}
+```
+
+### Sync From a Peer
+
+This compares the local chain with the selected peer chain. The local chain is replaced only when the peer chain is both valid and longer.
+
+```http
+POST /api/peers/{peerId}/sync
+```
+
+Example response:
+
+```json
+{
+  "peerId": "node-b",
+  "peerChainSize": 3,
+  "localChainSizeBefore": 1,
+  "localChainSizeAfter": 3,
+  "peerValid": true,
+  "adopted": true,
+  "message": "Local chain replaced with longer valid peer chain"
+}
+```
+
 ### Legacy Demo Block Endpoint
 
 This endpoint is kept for the basic learning flow from section A. It mines a new block with a tiny system transaction whose receiver is the supplied text.
@@ -166,6 +239,7 @@ Content-Type: application/json
 - `entity/Transaction.java`: transaction model, signing, signature verification, and mining reward transactions.
 - `entity/Wallet.java`: public/private key pair response model.
 - `service/BlockchainService.java`: in-memory chain, pending transaction pool, block mining, validation, difficulty, and reset logic.
+- `service/PeerNodeService.java`: simulated peer nodes, peer chains, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
@@ -199,11 +273,11 @@ Content-Type: application/json
 
 ### Section C: Simple Nodes and Sync
 
-- [ ] Simulate multiple nodes in the same app or through multiple instances.
-- [ ] API to register peers.
-- [ ] API to fetch a chain from a peer.
-- [ ] Rule to choose the longer valid chain.
-- [ ] Conflict resolution demo.
+- [x] Simulate multiple nodes in the same app or through multiple instances.
+- [x] API to register peers.
+- [x] API to fetch a chain from a peer.
+- [x] Rule to choose the longer valid chain.
+- [x] Conflict resolution demo.
 
 ### Section D: Code Quality and Observability
 
