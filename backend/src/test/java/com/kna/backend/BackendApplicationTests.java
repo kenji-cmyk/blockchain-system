@@ -1,8 +1,11 @@
 package com.kna.backend;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
+import com.kna.backend.entity.Block;
+import com.kna.backend.entity.Transaction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -30,6 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @SpringBootTest
 class BackendApplicationTests {
+
+    private final Gson gson = new Gson();
 
     @Autowired
     private MockMvc mockMvc;
@@ -118,7 +124,8 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.size").value(1))
                 .andExpect(jsonPath("$.difficulty").value(2))
                 .andExpect(jsonPath("$.pendingTransactions").value(0))
-                .andExpect(jsonPath("$.valid").value(true));
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.cumulativeDifficulty").value(4));
     }
 
     @Test
@@ -388,6 +395,96 @@ class BackendApplicationTests {
     }
 
     @Test
+    void broadcastDuplicateTransactionDoesNotDuplicatePendingPool() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        fundWallet(senderWallet);
+
+        MvcResult result = mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 1)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        mockMvc.perform(post("/api/transactions/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(result.getResponse().getContentAsString()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void rejectsBroadcastBlockWhenTransactionHistoryOverspendsSender() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        Block genesisBlock = currentBlock(0);
+
+        Transaction transaction = new Transaction(
+                senderWallet.get("publicKey").getAsString(),
+                receiverWallet.get("publicKey").getAsString(),
+                1
+        );
+        transaction.sign(senderWallet.get("privateKey").getAsString());
+        Block invalidBlock = new Block(1, List.of(transaction), genesisBlock.getHash());
+        invalidBlock.mineBlock(2);
+
+        mockMvc.perform(post("/api/blocks/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(gson.toJson(invalidBlock)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        mockMvc.perform(get("/api/chain/forks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].hash").value(invalidBlock.getHash()));
+    }
+
+    @Test
+    void tracksOrphanBlocksWhenPreviousHashIsUnknown() throws Exception {
+        Block orphanBlock = new Block(1, List.of(Transaction.miningReward("orphan-miner", 10)), "missing-parent");
+        orphanBlock.mineBlock(2);
+
+        mockMvc.perform(post("/api/blocks/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(gson.toJson(orphanBlock)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        mockMvc.perform(get("/api/chain/orphans"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].hash").value(orphanBlock.getHash()));
+    }
+
+    @Test
+    void tracksForkBlocksWhenPreviousHashIsKnownButNotCurrentHead() throws Exception {
+        Block genesisBlock = currentBlock(0);
+
+        mockMvc.perform(post("/api/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"data\":\"main branch\"}"))
+                .andExpect(status().isCreated());
+
+        Block forkBlock = new Block(2, List.of(Transaction.miningReward("fork-miner", 10)), genesisBlock.getHash());
+        forkBlock.mineBlock(2);
+
+        mockMvc.perform(post("/api/blocks/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(gson.toJson(forkBlock)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        mockMvc.perform(get("/api/chain/forks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].hash").value(forkBlock.getHash()));
+    }
+
+    @Test
     void resetClearsPendingTransactionsAndRestoresGenesisOnlyChain() throws Exception {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
@@ -616,6 +713,8 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.info.title").value("Blockchain Learning Backend API"))
                 .andExpect(jsonPath("$.paths['/api/blocks']").exists())
                 .andExpect(jsonPath("$.paths['/api/wallets/{address}/balance']").exists())
+                .andExpect(jsonPath("$.paths['/api/chain/forks']").exists())
+                .andExpect(jsonPath("$.paths['/api/chain/orphans']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/health']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/discover']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/sync']").exists());
@@ -629,6 +728,14 @@ class BackendApplicationTests {
                 .andReturn();
 
         return JsonParser.parseString(result.getResponse().getContentAsString()).getAsJsonObject();
+    }
+
+    private Block currentBlock(int index) throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/blocks/{index}", index))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return gson.fromJson(result.getResponse().getContentAsString(), Block.class);
     }
 
     private void registerPeer(String peerId) throws Exception {

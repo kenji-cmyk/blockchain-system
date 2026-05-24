@@ -4,7 +4,6 @@ import com.kna.backend.pkg.utils.StringUtil;
 
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class Block {
 
@@ -25,17 +24,21 @@ public class Block {
     }
 
     public String calculateHash() {
-        String transactionHash = transactions.stream()
-                .map(Transaction::getTransactionId)
-                .collect(Collectors.joining("|"));
+        return StringUtil.applySha256(canonicalPayload());
+    }
 
-        return StringUtil.applySha256(
-                previousHash
-                        + timeStamp
-                        + nonce
-                        + transactionHash
-                        + tamperMarker
-        );
+    private String canonicalPayload() {
+        StringBuilder payload = new StringBuilder();
+        payload.append("index=").append(index).append('\n');
+        payload.append("previousHash=").append(previousHash).append('\n');
+        payload.append("timeStamp=").append(timeStamp).append('\n');
+        payload.append("nonce=").append(nonce).append('\n');
+        payload.append("tamperMarker=").append(tamperMarker).append('\n');
+        payload.append("transactions=").append(transactions.size()).append('\n');
+        for (Transaction transaction : transactions) {
+            payload.append(transaction.getTransactionId()).append('\n');
+        }
+        return payload.toString();
     }
 
     public void mineBlock(int difficulty) {

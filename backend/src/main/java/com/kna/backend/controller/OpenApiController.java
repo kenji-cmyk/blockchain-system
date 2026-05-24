@@ -39,6 +39,8 @@ public class OpenApiController {
         paths.put("/api/blocks/broadcast", Map.of("post", operation("Accept a broadcast block")));
         paths.put("/api/chain/validate", Map.of("get", operation("Validate the chain")));
         paths.put("/api/chain/status", Map.of("get", operation("View chain status")));
+        paths.put("/api/chain/forks", Map.of("get", operation("View tracked fork blocks")));
+        paths.put("/api/chain/orphans", Map.of("get", operation("View tracked orphan blocks")));
         paths.put("/api/chain/difficulty", Map.of("put", operation("Update mining difficulty")));
         paths.put("/api/chain/tamper", Map.of("post", operation("Tamper with a block")));
         paths.put("/api/chain/reset", Map.of("post", operation("Reset chain state")));

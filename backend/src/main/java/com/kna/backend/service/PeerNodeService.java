@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.kna.backend.pkg.validate.Validator.cumulativeDifficulty;
 import static com.kna.backend.pkg.validate.Validator.isChainValid;
 
 @Service
@@ -142,18 +143,21 @@ public class PeerNodeService {
         boolean peerValid = isChainValid(
                 peerChain,
                 blockchainService.getDifficulty(),
-                blockchainService.getMaxTransactionsPerBlock()
+                blockchainService.getMaxTransactionsPerBlock(),
+                blockchainService.getMiningReward()
         );
-        boolean adopted = blockchainService.replaceChainIfLongerAndValid(peerChain);
+        boolean adopted = blockchainService.replaceChainIfStrongerAndValid(peerChain);
         int localSizeAfter = blockchainService.getBlocks().size();
 
         String message;
         if (adopted) {
-            message = "Local chain replaced with longer valid peer chain";
+            message = "Local chain replaced with stronger valid peer chain";
         } else if (!peerValid) {
             message = "Peer chain is invalid";
+        } else if (cumulativeDifficulty(peerChain) <= blockchainService.getCumulativeDifficulty()) {
+            message = "Local chain has at least as much cumulative difficulty as the peer chain";
         } else {
-            message = "Local chain is already at least as long as the peer chain";
+            message = "Peer chain was not adopted";
         }
 
         return new SyncResult(peerId, peerChain.size(), localSizeBefore, localSizeAfter, peerValid, adopted, message);
@@ -214,7 +218,12 @@ public class PeerNodeService {
         return new PeerSummary(
                 peer.peerId(),
                 chain.size(),
-                isChainValid(chain, blockchainService.getDifficulty(), blockchainService.getMaxTransactionsPerBlock()),
+                isChainValid(
+                        chain,
+                        blockchainService.getDifficulty(),
+                        blockchainService.getMaxTransactionsPerBlock(),
+                        blockchainService.getMiningReward()
+                ),
                 null,
                 true,
                 "simulated"

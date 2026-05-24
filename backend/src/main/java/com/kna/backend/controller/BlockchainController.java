@@ -3,6 +3,7 @@ package com.kna.backend.controller;
 import com.google.gson.Gson;
 import com.kna.backend.dto.AddBlockRequest;
 import com.kna.backend.dto.ApiMessage;
+import com.kna.backend.dto.BlockReference;
 import com.kna.backend.dto.BlockchainStatus;
 import com.kna.backend.dto.BroadcastBlockResult;
 import com.kna.backend.dto.BroadcastResult;
@@ -243,8 +244,19 @@ public class BlockchainController {
                 blockchainService.getBlocks().size(),
                 blockchainService.getDifficulty(),
                 blockchainService.getPendingTransactions().size(),
-                blockchainService.isValid()
+                blockchainService.isValid(),
+                blockchainService.getCumulativeDifficulty()
         );
+    }
+
+    @GetMapping("/chain/forks")
+    public List<BlockReference> getForkBlocks() {
+        return blockchainService.getForkBlocks();
+    }
+
+    @GetMapping("/chain/orphans")
+    public List<BlockReference> getOrphanBlocks() {
+        return blockchainService.getOrphanBlocks();
     }
 
     @PutMapping("/chain/difficulty")

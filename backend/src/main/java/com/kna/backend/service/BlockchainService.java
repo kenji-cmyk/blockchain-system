@@ -1,5 +1,6 @@
 package com.kna.backend.service;
 
+import com.kna.backend.dto.BlockReference;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.kna.backend.pkg.validate.Validator.cumulativeDifficulty;
 import static com.kna.backend.pkg.validate.Validator.isChainValid;
 
 @Service
@@ -21,6 +23,8 @@ public class BlockchainService {
 
     private final List<Block> blockchain = new ArrayList<>();
     private final List<Transaction> pendingTransactions = new ArrayList<>();
+    private final List<Block> forkBlocks = new ArrayList<>();
+    private final List<Block> orphanBlocks = new ArrayList<>();
     private final ChainPersistenceService chainPersistenceService;
     private int difficulty;
     private final double miningReward;
@@ -47,10 +51,19 @@ public class BlockchainService {
     }
 
     public synchronized boolean replaceChainIfLongerAndValid(List<Block> candidateChain) {
-        if (candidateChain == null || candidateChain.size() <= blockchain.size()) {
+        return replaceChainIfStrongerAndValid(candidateChain);
+    }
+
+    public synchronized boolean replaceChainIfStrongerAndValid(List<Block> candidateChain) {
+        if (candidateChain == null || candidateChain.isEmpty()) {
             return false;
         }
-        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock)) {
+        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
+            rememberCandidateBlocks(candidateChain);
+            return false;
+        }
+        if (cumulativeDifficulty(candidateChain) <= cumulativeDifficulty(blockchain)) {
+            rememberCandidateBlocks(candidateChain);
             return false;
         }
 
@@ -93,7 +106,7 @@ public class BlockchainService {
 
         boolean duplicate = pendingTransactions.stream()
                 .anyMatch(existing -> existing.getTransactionId().equals(transaction.getTransactionId()));
-        if (duplicate) {
+        if (duplicate || isTransactionCommitted(transaction.getTransactionId())) {
             return transaction;
         }
 
@@ -132,7 +145,7 @@ public class BlockchainService {
     }
 
     public synchronized boolean isValid() {
-        return isChainValid(blockchain, difficulty, maxTransactionsPerBlock);
+        return isChainValid(blockchain, difficulty, maxTransactionsPerBlock, miningReward);
     }
 
     public synchronized boolean acceptBroadcastBlock(Block block) {
@@ -142,15 +155,18 @@ public class BlockchainService {
 
         Block previousBlock = blockchain.getLast();
         if (block.getIndex() != blockchain.size()) {
+            rememberBlock(block);
             return false;
         }
         if (!previousBlock.getHash().equals(block.getPreviousHash())) {
+            rememberBlock(block);
             return false;
         }
 
         List<Block> candidateChain = new ArrayList<>(blockchain);
         candidateChain.add(block);
-        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock)) {
+        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
+            rememberBlock(block);
             return false;
         }
 
@@ -168,6 +184,8 @@ public class BlockchainService {
     public synchronized void reset() {
         blockchain.clear();
         pendingTransactions.clear();
+        forkBlocks.clear();
+        orphanBlocks.clear();
         Block genesisBlock = new Block(0, List.of(Transaction.miningReward("GENESIS", miningReward)), "0");
         mineAndLog(genesisBlock, "genesis");
         blockchain.add(genesisBlock);
@@ -218,6 +236,22 @@ public class BlockchainService {
         return balance - pendingOutgoing;
     }
 
+    public synchronized long getCumulativeDifficulty() {
+        return cumulativeDifficulty(blockchain);
+    }
+
+    public synchronized List<BlockReference> getForkBlocks() {
+        return forkBlocks.stream()
+                .map(this::toReference)
+                .toList();
+    }
+
+    public synchronized List<BlockReference> getOrphanBlocks() {
+        return orphanBlocks.stream()
+                .map(this::toReference)
+                .toList();
+    }
+
     public synchronized void setDifficulty(int difficulty) {
         if (difficulty < 0 || difficulty > 6) {
             throw new IllegalArgumentException("Difficulty must be between 0 and 6");
@@ -260,7 +294,7 @@ public class BlockchainService {
 
     private void loadOrReset() {
         chainPersistenceService.loadChain()
-                .filter(chain -> isChainValid(chain, difficulty, maxTransactionsPerBlock))
+                .filter(chain -> isChainValid(chain, difficulty, maxTransactionsPerBlock, miningReward))
                 .ifPresentOrElse(
                         chain -> {
                             blockchain.clear();
@@ -298,5 +332,36 @@ public class BlockchainService {
         if (fee < 0) {
             throw new IllegalArgumentException("Transaction fee must be greater than or equal to 0");
         }
+    }
+
+    private boolean isTransactionCommitted(String transactionId) {
+        return blockchain.stream()
+                .flatMap(block -> block.getTransactions().stream())
+                .anyMatch(transaction -> transaction.getTransactionId().equals(transactionId));
+    }
+
+    private void rememberCandidateBlocks(List<Block> candidateChain) {
+        candidateChain.stream()
+                .filter(block -> blockchain.stream().noneMatch(existing -> existing.getHash().equals(block.getHash())))
+                .forEach(this::rememberBlock);
+    }
+
+    private void rememberBlock(Block block) {
+        if (blockchain.stream().anyMatch(existing -> existing.getHash().equals(block.getPreviousHash()))) {
+            addUnique(forkBlocks, block);
+            return;
+        }
+        addUnique(orphanBlocks, block);
+    }
+
+    private void addUnique(List<Block> blocks, Block block) {
+        boolean duplicate = blocks.stream().anyMatch(existing -> existing.getHash().equals(block.getHash()));
+        if (!duplicate) {
+            blocks.add(block);
+        }
+    }
+
+    private BlockReference toReference(Block block) {
+        return new BlockReference(block.getIndex(), block.getHash(), block.getPreviousHash());
     }
 }

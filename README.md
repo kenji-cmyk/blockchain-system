@@ -9,6 +9,10 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Creates a genesis block on startup and after chain resets.
 - Mines blocks with proof-of-work and configurable difficulty.
 - Validates block hashes, previous hash links, difficulty, transaction signatures, and transaction count limits.
+- Replays complete transaction history during chain validation to reject overspending chains.
+- Selects peer chains by cumulative difficulty instead of simple length.
+- Tracks fork and orphan blocks received from peers.
+- Uses deterministic block hash serialization.
 - Generates URL-safe RSA wallet public/private key pairs.
 - Creates and signs transactions.
 - Supports optional transaction fees.
@@ -122,6 +126,8 @@ Important endpoints:
 - `POST /api/transactions/mine`: mine pending transactions and collect rewards plus fees.
 - `GET /api/chain/status`: view chain status.
 - `GET /api/chain/validate`: validate the chain.
+- `GET /api/chain/forks`: view tracked fork blocks.
+- `GET /api/chain/orphans`: view tracked orphan blocks.
 - `PUT /api/chain/difficulty`: update mining difficulty.
 - `POST /api/chain/tamper`: intentionally tamper with a block.
 - `POST /api/chain/reset`: reset chain state.
@@ -159,18 +165,10 @@ Completed:
 - Section D: unified error responses, validation annotations, OpenAPI document, mining logs, optional persistence, Dockerfile, and Docker Compose.
 - Phase 1: transaction fees, miner fee collection, chain-derived wallet balances, insufficient-balance rejection, account-state documentation, URL-safe wallet keys, and transaction count limits per block.
 - Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
+- Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
 - API tests for all current endpoints.
 
 ## Future Plan
-
-### Phase 3: Strengthen Consensus and Validation
-
-- Validate complete transaction history across candidate chains, including account-state replay.
-- Add chain cumulative difficulty instead of simple chain length.
-- Add fork handling and orphan block tracking.
-- Add mempool rules for duplicate transactions.
-- Add deterministic serialization for block hashes.
-- Consider a UTXO model for stricter spend tracking.
 
 ### Phase 4: Improve Persistence and Operations
 
