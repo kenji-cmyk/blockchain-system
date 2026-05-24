@@ -5,13 +5,15 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 ## Current Status
 
 - Runtime: Java 25, Spring Boot 4.0.6, Maven.
-- Storage: in-memory. Restarting the app clears the chain and pending transactions.
+- Storage: in-memory by default. Optional file or H2 database persistence can be enabled with configuration.
 - Block data: each block contains a list of `Transaction` objects.
 - Wallets: generated RSA public/private key pairs returned as Base64 strings.
 - Transactions: sender, receiver, amount, timestamp, transaction id, and digital signature.
 - Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, and every transaction signature must be valid.
 - Genesis block: created automatically on startup and when the reset API is called.
 - Peer sync: simulated peers run inside the same application. A peer has its own in-memory chain and can be used to demo conflict resolution without starting multiple app instances.
+- Error handling: API errors return a unified JSON format.
+- Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 
@@ -32,6 +34,14 @@ Run tests:
 ```bash
 mvn test
 ```
+
+Run with Docker Compose from the repository root:
+
+```bash
+docker compose up --build
+```
+
+The Docker Compose setup enables H2 database persistence and stores data in a Docker volume.
 
 ## API
 
@@ -148,6 +158,14 @@ This clears the chain and pending transaction pool, then creates a new genesis b
 POST /api/chain/reset
 ```
 
+### OpenAPI Document
+
+```http
+GET /api/docs/openapi
+```
+
+This returns an OpenAPI 3.0 JSON document for the available learning APIs.
+
 ### Register a Simulated Peer
 
 This creates a peer node inside the same application and initializes its chain from the current local chain.
@@ -233,14 +251,60 @@ Content-Type: application/json
 }
 ```
 
+## Error Format
+
+All handled API errors use the same response shape:
+
+```json
+{
+  "timestamp": "2026-05-24T09:00:00Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "data: Block data must not be blank",
+  "path": "/api/blocks"
+}
+```
+
+## Persistence
+
+Persistence is disabled by default:
+
+```properties
+blockchain.persistence.enabled=false
+```
+
+Enable JSON file persistence:
+
+```properties
+blockchain.persistence.enabled=true
+blockchain.persistence.type=file
+blockchain.persistence.file=data/blockchain-chain.json
+```
+
+Enable H2 database persistence:
+
+```properties
+blockchain.persistence.enabled=true
+blockchain.persistence.type=database
+spring.datasource.url=jdbc:h2:file:./data/blockchain-db
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+```
+
+Only the chain is persisted. Pending transactions and simulated peers remain in-memory learning state.
+
 ## Code Structure
 
 - `entity/Block.java`: block model, transaction list, hash calculation, mining, and tamper marker.
 - `entity/Transaction.java`: transaction model, signing, signature verification, and mining reward transactions.
 - `entity/Wallet.java`: public/private key pair response model.
 - `service/BlockchainService.java`: in-memory chain, pending transaction pool, block mining, validation, difficulty, and reset logic.
+- `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
 - `service/PeerNodeService.java`: simulated peer nodes, peer chains, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
+- `controller/ApiExceptionHandler.java`: unified API error responses.
+- `controller/OpenApiController.java`: OpenAPI document endpoint.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
@@ -281,9 +345,9 @@ Content-Type: application/json
 
 ### Section D: Code Quality and Observability
 
-- [ ] Add a unified exception response format.
-- [ ] Add request validation annotations.
-- [ ] Add OpenAPI/Swagger.
-- [ ] Add mining time and nonce count logs.
-- [ ] Add optional database persistence.
-- [ ] Add Dockerfile and docker-compose.
+- [x] Add a unified exception response format.
+- [x] Add request validation annotations.
+- [x] Add OpenAPI/Swagger.
+- [x] Add mining time and nonce count logs.
+- [x] Add optional database persistence.
+- [x] Add Dockerfile and docker-compose.
