@@ -10,14 +10,20 @@ public class Transaction {
     private final String sender;
     private final String receiver;
     private final double amount;
+    private final double fee;
     private final long timeStamp;
     private String signature;
     private final String transactionId;
 
     public Transaction(String sender, String receiver, double amount) {
+        this(sender, receiver, amount, 0);
+    }
+
+    public Transaction(String sender, String receiver, double amount, double fee) {
         this.sender = sender;
         this.receiver = receiver;
         this.amount = amount;
+        this.fee = fee;
         this.timeStamp = System.currentTimeMillis();
         this.transactionId = calculateTransactionId();
     }
@@ -37,12 +43,12 @@ public class Transaction {
 
     public boolean isValid() {
         if (isMiningReward()) {
-            return receiver != null && !receiver.isBlank() && amount > 0;
+            return receiver != null && !receiver.isBlank() && amount > 0 && fee == 0;
         }
         if (sender == null || sender.isBlank() || receiver == null || receiver.isBlank()) {
             return false;
         }
-        if (amount <= 0 || signature == null || signature.isBlank()) {
+        if (amount <= 0 || fee < 0 || signature == null || signature.isBlank()) {
             return false;
         }
         return CryptoUtil.verify(sender, signingPayload(), signature);
@@ -57,7 +63,7 @@ public class Transaction {
     }
 
     private String signingPayload() {
-        return sender + "|" + receiver + "|" + amount + "|" + timeStamp;
+        return sender + "|" + receiver + "|" + amount + "|" + fee + "|" + timeStamp;
     }
 
     public String getSender() {
@@ -70,6 +76,10 @@ public class Transaction {
 
     public double getAmount() {
         return amount;
+    }
+
+    public double getFee() {
+        return fee;
     }
 
     public long getTimeStamp() {

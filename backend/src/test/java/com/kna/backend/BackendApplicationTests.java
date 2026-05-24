@@ -192,6 +192,7 @@ class BackendApplicationTests {
     void canCreateSignedTransactionAndViewPendingPool() throws Exception {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
+        fundWallet(senderWallet);
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -200,6 +201,7 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.sender").value(senderWallet.get("publicKey").getAsString()))
                 .andExpect(jsonPath("$.receiver").value(receiverWallet.get("publicKey").getAsString()))
                 .andExpect(jsonPath("$.amount").value(5.0))
+                .andExpect(jsonPath("$.fee").value(0.0))
                 .andExpect(jsonPath("$.signature").isNotEmpty())
                 .andExpect(jsonPath("$.transactionId").isNotEmpty());
 
@@ -215,6 +217,7 @@ class BackendApplicationTests {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
         JsonObject unrelatedWallet = createWallet();
+        fundWallet(senderWallet);
 
         String requestJson = """
                 {
@@ -251,6 +254,38 @@ class BackendApplicationTests {
     }
 
     @Test
+    void rejectsTransactionWhenSenderBalanceIsInsufficient() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 5)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Sender balance is insufficient"));
+    }
+
+    @Test
+    void reportsWalletBalanceIncludingPendingOutgoingTransactions() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        fundWallet(senderWallet);
+
+        mockMvc.perform(get("/api/wallets/{address}/balance", senderWallet.get("publicKey").getAsString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(10.0));
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 3, 0.5)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/wallets/{address}/balance", senderWallet.get("publicKey").getAsString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(6.5));
+    }
+
+    @Test
     void rejectsMiningWhenThereAreNoPendingTransactions() throws Exception {
         JsonObject minerWallet = createWallet();
 
@@ -264,12 +299,15 @@ class BackendApplicationTests {
     void canCreateSignedTransactionMineRewardAndValidateChain() throws Exception {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
+        JsonObject minerWallet = createWallet();
+        fundWallet(senderWallet);
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(transactionJson(senderWallet, receiverWallet, 5)))
+                        .content(transactionJson(senderWallet, receiverWallet, 5, 1)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(5.0))
+                .andExpect(jsonPath("$.fee").value(1.0))
                 .andExpect(jsonPath("$.signature").isNotEmpty());
 
         mockMvc.perform(get("/api/chain/status"))
@@ -278,25 +316,74 @@ class BackendApplicationTests {
 
         mockMvc.perform(post("/api/transactions/mine")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(mineJson(senderWallet)))
+                        .content(mineJson(minerWallet)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.index").value(1))
+                .andExpect(jsonPath("$.index").value(2))
                 .andExpect(jsonPath("$.transactions", hasSize(2)))
                 .andExpect(jsonPath("$.transactions[0].amount").value(5.0))
+                .andExpect(jsonPath("$.transactions[0].fee").value(1.0))
                 .andExpect(jsonPath("$.transactions[1].sender").value("SYSTEM"))
-                .andExpect(jsonPath("$.transactions[1].amount").value(10.0));
+                .andExpect(jsonPath("$.transactions[1].amount").value(11.0));
 
         mockMvc.perform(get("/api/chain/validate"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.size").value(3))
                 .andExpect(jsonPath("$.pendingTransactions").value(0))
                 .andExpect(jsonPath("$.valid").value(true));
+
+        mockMvc.perform(get("/api/wallets/{address}/balance", senderWallet.get("publicKey").getAsString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(4.0));
+
+        mockMvc.perform(get("/api/wallets/{address}/balance", receiverWallet.get("publicKey").getAsString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(5.0));
+
+        mockMvc.perform(get("/api/wallets/{address}/balance", minerWallet.get("publicKey").getAsString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(11.0));
+    }
+
+    @Test
+    void miningPendingTransactionsRespectsTransactionCountLimit() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        JsonObject minerWallet = createWallet();
+        fundWallet(senderWallet);
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/transactions")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transactionJson(senderWallet, receiverWallet, 1)))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(post("/api/transactions/mine")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mineJson(minerWallet)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactions", hasSize(5)));
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        mockMvc.perform(post("/api/transactions/mine")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mineJson(minerWallet)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactions", hasSize(2)));
+
+        mockMvc.perform(get("/api/transactions/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
     void resetClearsPendingTransactionsAndRestoresGenesisOnlyChain() throws Exception {
         JsonObject senderWallet = createWallet();
         JsonObject receiverWallet = createWallet();
+        fundWallet(senderWallet);
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -436,6 +523,7 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.openapi").value("3.0.3"))
                 .andExpect(jsonPath("$.info.title").value("Blockchain Learning Backend API"))
                 .andExpect(jsonPath("$.paths['/api/blocks']").exists())
+                .andExpect(jsonPath("$.paths['/api/wallets/{address}/balance']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/sync']").exists());
     }
 
@@ -456,18 +544,31 @@ class BackendApplicationTests {
                 .andExpect(status().isCreated());
     }
 
+    private void fundWallet(JsonObject wallet) throws Exception {
+        mockMvc.perform(post("/api/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"data\":\"%s\"}".formatted(wallet.get("publicKey").getAsString())))
+                .andExpect(status().isCreated());
+    }
+
     private String transactionJson(JsonObject senderWallet, JsonObject receiverWallet, double amount) {
+        return transactionJson(senderWallet, receiverWallet, amount, 0);
+    }
+
+    private String transactionJson(JsonObject senderWallet, JsonObject receiverWallet, double amount, double fee) {
         return """
                 {
                   "sender": "%s",
                   "receiver": "%s",
                   "amount": %s,
+                  "fee": %s,
                   "privateKey": "%s"
                 }
                 """.formatted(
                 senderWallet.get("publicKey").getAsString(),
                 receiverWallet.get("publicKey").getAsString(),
                 amount,
+                fee,
                 senderWallet.get("privateKey").getAsString()
         );
     }

@@ -24,13 +24,19 @@ public class BlockchainService {
     private final ChainPersistenceService chainPersistenceService;
     private int difficulty;
     private final double miningReward;
+    private final int maxTransactionsPerBlock;
 
     public BlockchainService(
             @Value("${blockchain.difficulty:3}") int difficulty,
             @Value("${blockchain.mining-reward:10}") double miningReward,
+            @Value("${blockchain.max-transactions-per-block:5}") int maxTransactionsPerBlock,
             ChainPersistenceService chainPersistenceService
     ) {
         this.miningReward = miningReward;
+        if (maxTransactionsPerBlock < 2) {
+            throw new IllegalArgumentException("Max transactions per block must be at least 2");
+        }
+        this.maxTransactionsPerBlock = maxTransactionsPerBlock;
         this.chainPersistenceService = chainPersistenceService;
         setDifficulty(difficulty);
         loadOrReset();
@@ -44,7 +50,7 @@ public class BlockchainService {
         if (candidateChain == null || candidateChain.size() <= blockchain.size()) {
             return false;
         }
-        if (!isChainValid(candidateChain, difficulty)) {
+        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock)) {
             return false;
         }
 
@@ -64,7 +70,7 @@ public class BlockchainService {
 
     public synchronized Block addBlock(String data) {
         validateData(data);
-        Transaction transaction = Transaction.miningReward(data, 0.00000001);
+        Transaction transaction = Transaction.miningReward(data, miningReward);
         return mineTransactions(List.of(transaction));
     }
 
@@ -72,10 +78,16 @@ public class BlockchainService {
         return CryptoUtil.generateWallet();
     }
 
-    public synchronized Transaction createTransaction(String sender, String receiver, double amount, String privateKey) {
-        validateTransactionInput(sender, receiver, amount, privateKey);
+    public synchronized Transaction createTransaction(String sender, String receiver, double amount, double fee, String privateKey) {
+        validateTransactionInput(sender, receiver, amount, fee, privateKey);
 
-        Transaction transaction = new Transaction(sender, receiver, amount);
+        double availableBalance = getAvailableBalance(sender);
+        double totalCost = amount + fee;
+        if (availableBalance < totalCost) {
+            throw new IllegalArgumentException("Sender balance is insufficient");
+        }
+
+        Transaction transaction = new Transaction(sender, receiver, amount, fee);
         transaction.sign(privateKey);
 
         if (!transaction.isValid()) {
@@ -96,16 +108,22 @@ public class BlockchainService {
             throw new IllegalArgumentException("There are no pending transactions to mine");
         }
 
-        List<Transaction> transactionsToMine = new ArrayList<>(pendingTransactions);
-        transactionsToMine.add(Transaction.miningReward(rewardAddress, miningReward));
+        int pendingLimit = maxTransactionsPerBlock - 1;
+        List<Transaction> transactionsToMine = new ArrayList<>(
+                pendingTransactions.subList(0, Math.min(pendingLimit, pendingTransactions.size()))
+        );
+        double collectedFees = transactionsToMine.stream()
+                .mapToDouble(Transaction::getFee)
+                .sum();
+        transactionsToMine.add(Transaction.miningReward(rewardAddress, miningReward + collectedFees));
         Block block = mineTransactions(transactionsToMine);
-        pendingTransactions.clear();
+        pendingTransactions.subList(0, transactionsToMine.size() - 1).clear();
         chainPersistenceService.saveChain(blockchain);
         return block;
     }
 
     public synchronized boolean isValid() {
-        return isChainValid(blockchain, difficulty);
+        return isChainValid(blockchain, difficulty, maxTransactionsPerBlock);
     }
 
     public synchronized void tamperBlock(int index, String data) {
@@ -130,6 +148,42 @@ public class BlockchainService {
         return miningReward;
     }
 
+    public int getMaxTransactionsPerBlock() {
+        return maxTransactionsPerBlock;
+    }
+
+    public synchronized double getBalance(String address) {
+        validateData(address);
+        double balance = 0;
+        for (Block block : blockchain) {
+            for (Transaction transaction : block.getTransactions()) {
+                if (transaction.isMiningReward()) {
+                    if (address.equals(transaction.getReceiver())) {
+                        balance += transaction.getAmount();
+                    }
+                    continue;
+                }
+
+                if (address.equals(transaction.getSender())) {
+                    balance -= transaction.getAmount() + transaction.getFee();
+                }
+                if (address.equals(transaction.getReceiver())) {
+                    balance += transaction.getAmount();
+                }
+            }
+        }
+        return balance;
+    }
+
+    public synchronized double getAvailableBalance(String address) {
+        double balance = getBalance(address);
+        double pendingOutgoing = pendingTransactions.stream()
+                .filter(transaction -> address.equals(transaction.getSender()))
+                .mapToDouble(transaction -> transaction.getAmount() + transaction.getFee())
+                .sum();
+        return balance - pendingOutgoing;
+    }
+
     public synchronized void setDifficulty(int difficulty) {
         if (difficulty < 0 || difficulty > 6) {
             throw new IllegalArgumentException("Difficulty must be between 0 and 6");
@@ -149,6 +203,9 @@ public class BlockchainService {
                 throw new IllegalArgumentException("Block contains an invalid transaction");
             }
         }
+        if (transactions.size() > maxTransactionsPerBlock) {
+            throw new IllegalArgumentException("Block exceeds the transaction count limit");
+        }
 
         Block previousBlock = blockchain.getLast();
         Block block = new Block(blockchain.size(), transactions, previousBlock.getHash());
@@ -160,7 +217,7 @@ public class BlockchainService {
 
     private void loadOrReset() {
         chainPersistenceService.loadChain()
-                .filter(chain -> isChainValid(chain, difficulty))
+                .filter(chain -> isChainValid(chain, difficulty, maxTransactionsPerBlock))
                 .ifPresentOrElse(
                         chain -> {
                             blockchain.clear();
@@ -188,12 +245,15 @@ public class BlockchainService {
         );
     }
 
-    private void validateTransactionInput(String sender, String receiver, double amount, String privateKey) {
+    private void validateTransactionInput(String sender, String receiver, double amount, double fee, String privateKey) {
         validateData(sender);
         validateData(receiver);
         validateData(privateKey);
         if (amount <= 0) {
             throw new IllegalArgumentException("Transaction amount must be greater than 0");
+        }
+        if (fee < 0) {
+            throw new IllegalArgumentException("Transaction fee must be greater than or equal to 0");
         }
     }
 }

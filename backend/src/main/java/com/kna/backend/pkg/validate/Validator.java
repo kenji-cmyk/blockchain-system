@@ -7,10 +7,18 @@ import java.util.List;
 public class Validator {
 
     public static boolean isChainValid(List<Block> blockChain, int difficulty) {
+        return isChainValid(blockChain, difficulty, Integer.MAX_VALUE);
+    }
+
+    public static boolean isChainValid(List<Block> blockChain, int difficulty, int maxTransactionsPerBlock) {
         String hashTarget = "0".repeat(difficulty);
 
         for (int i = 0; i < blockChain.size(); ++i) {
             Block currentBlock = blockChain.get(i);
+
+            if (currentBlock.getTransactions().size() > maxTransactionsPerBlock) {
+                return false;
+            }
 
             if (!currentBlock.getHash().equals(currentBlock.calculateHash())) {
                 return false;

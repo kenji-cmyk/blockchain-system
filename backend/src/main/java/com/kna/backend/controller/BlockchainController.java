@@ -11,6 +11,7 @@ import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.RegisterPeerRequest;
 import com.kna.backend.dto.SyncResult;
 import com.kna.backend.dto.TamperBlockRequest;
+import com.kna.backend.dto.WalletBalance;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
@@ -71,6 +72,15 @@ public class BlockchainController {
         return blockchainService.createWallet();
     }
 
+    @GetMapping("/wallets/{address}/balance")
+    public WalletBalance getWalletBalance(@PathVariable String address) {
+        try {
+            return new WalletBalance(address, blockchainService.getAvailableBalance(address));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
     @GetMapping("/transactions/pending")
     public List<Transaction> getPendingTransactions() {
         return blockchainService.getPendingTransactions();
@@ -84,6 +94,7 @@ public class BlockchainController {
                     request.sender(),
                     request.receiver(),
                     request.amount(),
+                    request.fee(),
                     request.privateKey()
             );
         } catch (IllegalArgumentException exception) {

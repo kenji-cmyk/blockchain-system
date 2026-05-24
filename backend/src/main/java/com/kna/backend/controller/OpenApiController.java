@@ -31,6 +31,7 @@ public class OpenApiController {
         ));
         paths.put("/api/blocks/{index}", Map.of("get", operation("View a block by index")));
         paths.put("/api/wallets/new", Map.of("get", operation("Create a wallet")));
+        paths.put("/api/wallets/{address}/balance", Map.of("get", operation("View a wallet balance")));
         paths.put("/api/transactions", Map.of("post", operation("Create a signed transaction")));
         paths.put("/api/transactions/pending", Map.of("get", operation("View pending transactions")));
         paths.put("/api/transactions/mine", Map.of("post", operation("Mine pending transactions")));

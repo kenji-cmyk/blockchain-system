@@ -1,6 +1,6 @@
 # Blockchain System
 
-Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, transactions, wallets, digital signatures, pending transactions, mining rewards, simulated peers, and basic chain synchronization.
+Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, signed transactions, wallets, balances, fees, mining rewards, pending transactions, simulated peers, and basic chain synchronization.
 
 This is not a production blockchain. The project intentionally keeps the architecture small and observable so each concept can be tested, broken, reset, and extended step by step.
 
@@ -8,11 +8,16 @@ This is not a production blockchain. The project intentionally keeps the archite
 
 - Creates a genesis block on startup and after chain resets.
 - Mines blocks with proof-of-work and configurable difficulty.
-- Validates block hashes, previous hash links, difficulty, and transaction signatures.
-- Generates wallets as RSA public/private key pairs.
+- Validates block hashes, previous hash links, difficulty, transaction signatures, and transaction count limits.
+- Generates URL-safe RSA wallet public/private key pairs.
 - Creates and signs transactions.
+- Supports optional transaction fees.
+- Derives wallet balances from committed chain history.
+- Rejects transactions when the sender cannot cover amount plus fee.
 - Stores new transactions in a pending transaction pool.
-- Mines pending transactions into new blocks with miner rewards.
+- Shows available wallet balance after subtracting pending outgoing transactions.
+- Mines pending transactions into new blocks with miner rewards plus collected fees.
+- Limits the number of transactions that can be included in one block.
 - Simulates peer nodes inside the same app.
 - Resolves conflicts by adopting a longer valid peer chain.
 - Exposes a tamper API for validation demos.
@@ -27,17 +32,17 @@ This is not a production blockchain. The project intentionally keeps the archite
 
 ```text
 blockchain-system/
-├── README.md
-├── docker-compose.yml
-└── backend/
-    ├── Dockerfile
-    ├── README.md
-    ├── pom.xml
-    └── src/
-        ├── main/
-        │   ├── java/com/kna/backend/
-        │   └── resources/
-        └── test/
+|-- README.md
+|-- docker-compose.yml
+`-- backend/
+    |-- Dockerfile
+    |-- README.md
+    |-- pom.xml
+    `-- src/
+        |-- main/
+        |   |-- java/com/kna/backend/
+        |   `-- resources/
+        `-- test/
 ```
 
 Key areas:
@@ -45,7 +50,7 @@ Key areas:
 - `backend/`: Spring Boot REST API containing the blockchain implementation.
 - `backend/README.md`: detailed backend documentation, API examples, configuration, and roadmap.
 - `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
-- `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, and peer sync logic.
+- `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, balance, and peer sync logic.
 - `backend/src/main/java/com/kna/backend/controller`: REST API controllers and error handling.
 - `backend/src/test`: API tests.
 
@@ -104,10 +109,12 @@ Important endpoints:
 
 - `GET /api/blocks`: view the full chain.
 - `GET /api/blocks/{index}`: view a block by index.
+- `POST /api/blocks`: mine a legacy demo reward block for a text/address receiver.
 - `GET /api/wallets/new`: create a wallet.
-- `POST /api/transactions`: create and sign a transaction.
+- `GET /api/wallets/{address}/balance`: view a wallet's available balance.
+- `POST /api/transactions`: create and sign a transaction with optional `fee`.
 - `GET /api/transactions/pending`: view the pending transaction pool.
-- `POST /api/transactions/mine`: mine pending transactions.
+- `POST /api/transactions/mine`: mine pending transactions and collect rewards plus fees.
 - `GET /api/chain/status`: view chain status.
 - `GET /api/chain/validate`: validate the chain.
 - `PUT /api/chain/difficulty`: update mining difficulty.
@@ -120,6 +127,17 @@ Important endpoints:
 - `POST /api/peers/{peerId}/sync`: sync from a peer.
 - `GET /api/docs/openapi`: view the OpenAPI document.
 
+## Balance Model
+
+The project currently uses an account-state model derived from chain history:
+
+- Mining rewards add balance to the reward receiver.
+- A normal transaction subtracts `amount + fee` from the sender.
+- A normal transaction adds `amount` to the receiver.
+- Pending outgoing transactions are subtracted from the available balance so the sender cannot overspend before mining.
+
+This is simpler than a UTXO model and fits the learning API well because balances can be explained by replaying the chain from genesis. The tradeoff is that it does not model individual spendable outputs, coin selection, or UTXO set validation the way Bitcoin-like systems do. A UTXO model is a good future step when the project moves toward stronger consensus validation.
+
 ## Current Status
 
 Completed:
@@ -128,17 +146,10 @@ Completed:
 - Section B: transactions, wallets, transaction signing and verification, pending transaction pool, and mining rewards.
 - Section C: simulated peers, peer registration, peer chain fetch, longer-valid-chain conflict resolution, and sync demo.
 - Section D: unified error responses, validation annotations, OpenAPI document, mining logs, optional persistence, Dockerfile, and Docker Compose.
+- Phase 1: transaction fees, miner fee collection, chain-derived wallet balances, insufficient-balance rejection, account-state documentation, URL-safe wallet keys, and transaction count limits per block.
 - API tests for all current endpoints.
 
 ## Future Plan
-
-### Phase 1: Make the Blockchain Model More Realistic
-
-- Add transaction fees and miner fee collection.
-- Add wallet balances derived from transaction history.
-- Reject transactions when the sender balance is insufficient.
-- Add a UTXO-style model or account-state model and document the tradeoffs.
-- Add block size or transaction count limits.
 
 ### Phase 2: Improve Peer Networking
 
@@ -151,11 +162,12 @@ Completed:
 
 ### Phase 3: Strengthen Consensus and Validation
 
-- Validate complete transaction history, not only signatures.
+- Validate complete transaction history across candidate chains, including account-state replay.
 - Add chain cumulative difficulty instead of simple chain length.
 - Add fork handling and orphan block tracking.
 - Add mempool rules for duplicate transactions.
 - Add deterministic serialization for block hashes.
+- Consider a UTXO model for stricter spend tracking.
 
 ### Phase 4: Improve Persistence and Operations
 
@@ -170,6 +182,7 @@ Completed:
 
 - Build a small web UI for chain browsing.
 - Add wallet creation and transaction submission screens.
+- Show wallet balances, pending outgoing transactions, fees, and miner rewards.
 - Show mining progress, nonce count, and chain validity.
 - Visualize peer chains and conflict resolution.
 

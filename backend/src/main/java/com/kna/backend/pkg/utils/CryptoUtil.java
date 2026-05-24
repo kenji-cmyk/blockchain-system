@@ -25,8 +25,8 @@ public class CryptoUtil {
             KeyPair keyPair = keyPairGenerator.generateKeyPair();
 
             return new Wallet(
-                    Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()),
-                    Base64.getEncoder().encodeToString(keyPair.getPrivate().getEncoded())
+                    Base64.getUrlEncoder().withoutPadding().encodeToString(keyPair.getPublic().getEncoded()),
+                    Base64.getUrlEncoder().withoutPadding().encodeToString(keyPair.getPrivate().getEncoded())
             );
         } catch (Exception exception) {
             throw new IllegalStateException("Could not generate wallet", exception);
@@ -38,7 +38,7 @@ public class CryptoUtil {
             Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
             signature.initSign(toPrivateKey(privateKey));
             signature.update(data.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(signature.sign());
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(signature.sign());
         } catch (Exception exception) {
             throw new IllegalArgumentException("Could not sign transaction", exception);
         }
@@ -49,21 +49,34 @@ public class CryptoUtil {
             Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
             signature.initVerify(toPublicKey(publicKey));
             signature.update(data.getBytes(StandardCharsets.UTF_8));
-            return signature.verify(Base64.getDecoder().decode(signatureText));
+            return signature.verify(decodeBase64(signatureText));
         } catch (Exception exception) {
             return false;
         }
     }
 
     private static PrivateKey toPrivateKey(String privateKey) throws Exception {
-        byte[] keyBytes = Base64.getDecoder().decode(privateKey);
+        byte[] keyBytes = decodeBase64(privateKey);
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
         return KeyFactory.getInstance(KEY_ALGORITHM).generatePrivate(keySpec);
     }
 
     private static PublicKey toPublicKey(String publicKey) throws Exception {
-        byte[] keyBytes = Base64.getDecoder().decode(publicKey);
+        byte[] keyBytes = decodeBase64(publicKey);
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(keyBytes);
         return KeyFactory.getInstance(KEY_ALGORITHM).generatePublic(keySpec);
+    }
+
+    private static byte[] decodeBase64(String value) {
+        try {
+            return Base64.getUrlDecoder().decode(padBase64(value));
+        } catch (IllegalArgumentException exception) {
+            return Base64.getDecoder().decode(value);
+        }
+    }
+
+    private static String padBase64(String value) {
+        int padding = (4 - value.length() % 4) % 4;
+        return value + "=".repeat(padding);
     }
 }

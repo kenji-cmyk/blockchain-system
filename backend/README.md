@@ -1,21 +1,23 @@
 # Blockchain Learning Backend
 
-This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, a pending transaction pool, mining rewards, peer nodes, and basic chain synchronization.
+This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, account-state balances, transaction fees, a pending transaction pool, mining rewards, peer nodes, and basic chain synchronization.
 
 ## Current Status
 
 - Runtime: Java 25, Spring Boot 4.0.6, Maven.
 - Storage: in-memory by default. Optional file or H2 database persistence can be enabled with configuration.
 - Block data: each block contains a list of `Transaction` objects.
-- Wallets: generated RSA public/private key pairs returned as Base64 strings.
-- Transactions: sender, receiver, amount, timestamp, transaction id, and digital signature.
-- Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, and every transaction signature must be valid.
+- Wallets: generated RSA public/private key pairs returned as URL-safe Base64 strings.
+- Transactions: sender, receiver, amount, optional fee, timestamp, transaction id, and digital signature.
+- Balances: derived by replaying committed chain history, with pending outgoing transactions subtracted from the available balance.
+- Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, every transaction signature must be valid, and each block must stay within the configured transaction count limit.
 - Genesis block: created automatically on startup and when the reset API is called.
 - Peer sync: simulated peers run inside the same application. A peer has its own in-memory chain and can be used to demo conflict resolution without starting multiple app instances.
 - Error handling: API errors return a unified JSON format.
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
+- Default transaction count limit: `blockchain.max-transactions-per-block=5`.
 
 ## Running the Project
 
@@ -85,9 +87,20 @@ Content-Type: application/json
   "sender": "BASE64_PUBLIC_KEY",
   "receiver": "BASE64_PUBLIC_KEY",
   "amount": 5,
+  "fee": 0.25,
   "privateKey": "BASE64_PRIVATE_KEY"
 }
 ```
+
+The sender must have enough available balance to cover `amount + fee`. The `fee` field is optional and defaults to `0`.
+
+### View Wallet Balance
+
+```http
+GET /api/wallets/{address}/balance
+```
+
+The response returns available balance, which is committed balance minus pending outgoing transactions.
 
 ### View Pending Transactions
 
@@ -97,7 +110,7 @@ GET /api/transactions/pending
 
 ### Mine Pending Transactions
 
-This mines all pending transactions into a new block and adds a mining reward transaction for the given reward address.
+This mines pending transactions into a new block and adds a mining reward transaction for the given reward address. The reward amount is `blockchain.mining-reward` plus the fees collected from the transactions included in that block.
 
 ```http
 POST /api/transactions/mine
@@ -248,7 +261,7 @@ Example response:
 
 ### Legacy Demo Block Endpoint
 
-This endpoint is kept for the basic learning flow from section A. It mines a new block with a tiny system transaction whose receiver is the supplied text.
+This endpoint is kept for the basic learning flow from section A. It mines a new reward-only block whose receiver is the supplied text or wallet address. In tests and demos it can be used to fund a wallet before sending transactions.
 
 ```http
 POST /api/blocks
@@ -307,7 +320,7 @@ Only the chain is persisted. Pending transactions and simulated peers remain in-
 - `entity/Block.java`: block model, transaction list, hash calculation, mining, and tamper marker.
 - `entity/Transaction.java`: transaction model, signing, signature verification, and mining reward transactions.
 - `entity/Wallet.java`: public/private key pair response model.
-- `service/BlockchainService.java`: in-memory chain, pending transaction pool, block mining, validation, difficulty, and reset logic.
+- `service/BlockchainService.java`: in-memory chain, pending transaction pool, account-state balances, fees, block mining, validation, difficulty, and reset logic.
 - `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
 - `service/PeerNodeService.java`: simulated peer nodes, peer chains, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
@@ -342,6 +355,14 @@ Only the chain is persisted. Pending transactions and simulated peers remain in-
 - [x] Change block data from a string to a transaction list.
 - [x] Add a pending transaction pool.
 - [x] Add a basic mining reward.
+
+### Phase 1: More Realistic Blockchain Model
+
+- [x] Add transaction fees and miner fee collection.
+- [x] Add wallet balances derived from transaction history.
+- [x] Reject transactions when the sender balance is insufficient.
+- [x] Use an account-state balance model and document the tradeoffs.
+- [x] Add block transaction count limits.
 
 ### Section C: Simple Nodes and Sync
 

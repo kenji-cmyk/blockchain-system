@@ -73,7 +73,11 @@ public class PeerNodeService {
     public synchronized SyncResult syncFromPeer(String peerId) {
         List<Block> peerChain = getMutablePeerChain(peerId);
         int localSizeBefore = blockchainService.getBlocks().size();
-        boolean peerValid = isChainValid(peerChain, blockchainService.getDifficulty());
+        boolean peerValid = isChainValid(
+                peerChain,
+                blockchainService.getDifficulty(),
+                blockchainService.getMaxTransactionsPerBlock()
+        );
         boolean adopted = blockchainService.replaceChainIfLongerAndValid(peerChain);
         int localSizeAfter = blockchainService.getBlocks().size();
 
@@ -98,7 +102,11 @@ public class PeerNodeService {
         return new PeerSummary(
                 peerId,
                 chain.size(),
-                isChainValid(chain, blockchainService.getDifficulty())
+                isChainValid(
+                        chain,
+                        blockchainService.getDifficulty(),
+                        blockchainService.getMaxTransactionsPerBlock()
+                )
         );
     }
 
