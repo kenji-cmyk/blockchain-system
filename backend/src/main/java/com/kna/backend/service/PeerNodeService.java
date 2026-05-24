@@ -3,6 +3,7 @@ package com.kna.backend.service;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.kna.backend.dto.BroadcastResult;
+import com.kna.backend.dto.PersistedPeer;
 import com.kna.backend.dto.PeerHealth;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.SyncResult;
@@ -35,6 +36,7 @@ public class PeerNodeService {
     }.getType();
 
     private final BlockchainService blockchainService;
+    private final ChainPersistenceService chainPersistenceService;
     private final Map<String, PeerNode> peers = new LinkedHashMap<>();
     private final Gson gson = new Gson();
     private final HttpClient httpClient;
@@ -43,15 +45,18 @@ public class PeerNodeService {
 
     public PeerNodeService(
             BlockchainService blockchainService,
+            ChainPersistenceService chainPersistenceService,
             @Value("${blockchain.peer.timeout-ms:1500}") long timeoutMs,
             @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts
     ) {
         this.blockchainService = blockchainService;
+        this.chainPersistenceService = chainPersistenceService;
         this.timeout = Duration.ofMillis(timeoutMs);
         this.retryAttempts = Math.max(1, retryAttempts);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .build();
+        loadPersistedPeers();
     }
 
     public synchronized PeerSummary registerPeer(String peerId, String baseUrl) {
@@ -62,6 +67,7 @@ public class PeerNodeService {
                 normalizedBaseUrl,
                 normalizedBaseUrl == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
         ));
+        savePeers();
         return toSummary(peerId);
     }
 
@@ -81,12 +87,17 @@ public class PeerNodeService {
                 .toList();
     }
 
+    public synchronized int getPeerCount() {
+        return peers.size();
+    }
+
     public synchronized PeerSummary removePeer(String peerId) {
         validatePeerId(peerId);
         PeerNode removed = peers.remove(peerId);
         if (removed == null) {
             throw new IllegalArgumentException("Peer does not exist");
         }
+        savePeers();
         return toSummary(removed);
     }
 
@@ -173,6 +184,7 @@ public class PeerNodeService {
 
     public synchronized void resetPeers() {
         peers.clear();
+        savePeers();
     }
 
     private BroadcastResult broadcastJson(String path, String body) {
@@ -324,6 +336,24 @@ public class PeerNodeService {
         int port = uri.getPort();
         String portText = port == -1 ? "" : "-" + port;
         return (uri.getHost() + portText).replace(".", "-");
+    }
+
+    private void loadPersistedPeers() {
+        chainPersistenceService.loadPeers()
+                .orElse(List.of())
+                .forEach(peer -> peers.put(peer.peerId(), new PeerNode(
+                        peer.peerId(),
+                        peer.baseUrl(),
+                        peer.baseUrl() == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
+                )));
+    }
+
+    private void savePeers() {
+        List<PersistedPeer> persistedPeers = peers.values()
+                .stream()
+                .map(peer -> new PersistedPeer(peer.peerId(), peer.baseUrl()))
+                .toList();
+        chainPersistenceService.savePeers(persistedPeers);
     }
 
     private record PeerNode(String peerId, String baseUrl, List<Block> simulatedChain) {

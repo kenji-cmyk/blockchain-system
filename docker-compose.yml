@@ -5,6 +5,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      SPRING_PROFILES_ACTIVE: "docker"
       BLOCKCHAIN_PERSISTENCE_ENABLED: "true"
       BLOCKCHAIN_PERSISTENCE_TYPE: "database"
       SPRING_DATASOURCE_URL: "jdbc:h2:file:/data/blockchain-db"

@@ -5,7 +5,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 ## Current Status
 
 - Runtime: Java 25, Spring Boot 4.0.6, Maven.
-- Storage: in-memory by default. Optional file or H2 database persistence can be enabled with configuration.
+- Storage: in-memory by default. Optional file persistence or normalized H2 database persistence can be enabled with configuration.
 - Block data: each block contains a list of `Transaction` objects.
 - Wallets: generated RSA public/private key pairs returned as URL-safe Base64 strings.
 - Transactions: sender, receiver, amount, optional fee, timestamp, transaction id, and digital signature.
@@ -16,6 +16,8 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Peer networking: HTTP peers support health checks, discovery by URL, removal, transaction broadcast, block broadcast, and configurable timeout/retry handling.
 - Error handling: API errors return a unified JSON format.
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
+- Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
+- Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
@@ -180,6 +182,44 @@ This clears the chain and pending transaction pool, then creates a new genesis b
 
 ```http
 POST /api/chain/reset
+```
+
+### Operations Health
+
+```http
+GET /api/ops/health
+```
+
+Example response:
+
+```json
+{
+  "status": "UP",
+  "chainValid": true,
+  "chainSize": 1,
+  "pendingTransactions": 0,
+  "persistenceEnabled": false,
+  "persistenceType": "file"
+}
+```
+
+### Operations Metrics
+
+```http
+GET /api/ops/metrics
+```
+
+Example response:
+
+```json
+{
+  "chainSize": 1,
+  "pendingTransactions": 0,
+  "cumulativeDifficulty": 4,
+  "forkBlocks": 0,
+  "orphanBlocks": 0,
+  "peers": 0
+}
 ```
 
 ### OpenAPI Document
@@ -386,7 +426,19 @@ spring.datasource.username=sa
 spring.datasource.password=
 ```
 
-Only the chain is persisted. Pending transactions and simulated peers remain in-memory learning state.
+Database persistence writes normalized tables for blocks, transactions, wallets, peers, and pending transactions. A simple schema migration table records the current schema version. File persistence still stores only the chain JSON and is intended for lightweight local demos.
+
+## Application Profiles
+
+- `local`: local development defaults with persistence disabled.
+- `test`: faster proof-of-work settings, in-memory H2 datasource, and persistence disabled unless a test overrides it.
+- `docker`: database persistence enabled with H2 data stored under `/data`.
+
+Run with a profile:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
 
 ## Code Structure
 
@@ -404,6 +456,7 @@ Only the chain is persisted. Pending transactions and simulated peers remain in-
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
 - `dto/*`: request/response records for the API.
 - `BackendApplicationTests.java`: MockMvc tests for block, chain, wallet, transaction, and mining workflows.
+- `DatabasePersistenceTests.java`: database-mode persistence tests for normalized tables.
 
 ## Roadmap
 
@@ -453,6 +506,23 @@ Only the chain is persisted. Pending transactions and simulated peers remain in-
 - [x] Broadcast pending transactions to HTTP peers.
 - [x] Broadcast newly mined blocks to HTTP peers.
 - [x] Add sync retry and timeout handling.
+
+### Phase 3: Strengthen Consensus and Validation
+
+- [x] Validate complete transaction history across candidate chains, including account-state replay.
+- [x] Add chain cumulative difficulty instead of simple chain length.
+- [x] Add fork handling and orphan block tracking.
+- [x] Add mempool rules for duplicate transactions.
+- [x] Add deterministic serialization for block hashes.
+
+### Phase 4: Improve Persistence and Operations
+
+- [x] Persist blocks, transactions, wallets, peers, and mempool state in normalized tables.
+- [x] Add database migration tracking.
+- [x] Add application profiles for local, test, and docker.
+- [x] Add health endpoints and metrics.
+- [x] Add structured logs and request tracing.
+- [x] Add CI workflow for tests and Docker build.
 
 ### Section D: Code Quality and Observability
 

@@ -33,7 +33,11 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Returns unified JSON error responses.
 - Exposes an OpenAPI JSON document at `GET /api/docs/openapi`.
 - Logs mining time and nonce count.
-- Supports optional file or H2 database persistence.
+- Supports optional file persistence and normalized H2 database persistence.
+- Provides local, test, and docker application profiles.
+- Exposes operations health and metrics APIs.
+- Adds request tracing with `X-Request-Id`.
+- Includes CI workflow for backend tests and Docker image build.
 - Includes Docker and Docker Compose setup.
 - Includes MockMvc tests for all current APIs.
 
@@ -131,6 +135,8 @@ Important endpoints:
 - `PUT /api/chain/difficulty`: update mining difficulty.
 - `POST /api/chain/tamper`: intentionally tamper with a block.
 - `POST /api/chain/reset`: reset chain state.
+- `GET /api/ops/health`: view backend health.
+- `GET /api/ops/metrics`: view backend metrics.
 - `POST /api/peers`: register a simulated peer or HTTP peer.
 - `GET /api/peers`: list registered peers.
 - `POST /api/peers/discover`: register peers from base URLs.
@@ -166,18 +172,10 @@ Completed:
 - Phase 1: transaction fees, miner fee collection, chain-derived wallet balances, insufficient-balance rejection, account-state documentation, URL-safe wallet keys, and transaction count limits per block.
 - Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
 - Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
+- Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
 - API tests for all current endpoints.
 
 ## Future Plan
-
-### Phase 4: Improve Persistence and Operations
-
-- Persist blocks, transactions, wallets, peers, and mempool state in normalized tables.
-- Add database migrations.
-- Add application profiles for local, test, and docker.
-- Add health endpoints and metrics.
-- Add structured logs and request tracing.
-- Add CI workflow for tests and Docker build.
 
 ### Phase 5: Add Client Experience
 

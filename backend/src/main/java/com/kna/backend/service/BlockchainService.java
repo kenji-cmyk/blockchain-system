@@ -88,7 +88,9 @@ public class BlockchainService {
     }
 
     public Wallet createWallet() {
-        return CryptoUtil.generateWallet();
+        Wallet wallet = CryptoUtil.generateWallet();
+        chainPersistenceService.saveWallet(wallet);
+        return wallet;
     }
 
     public synchronized Transaction createTransaction(String sender, String receiver, double amount, double fee, String privateKey) {
@@ -117,6 +119,7 @@ public class BlockchainService {
         }
 
         pendingTransactions.add(transaction);
+        chainPersistenceService.savePendingTransactions(pendingTransactions);
         return transaction;
     }
 
@@ -140,6 +143,7 @@ public class BlockchainService {
         transactionsToMine.add(Transaction.miningReward(rewardAddress, miningReward + collectedFees));
         Block block = mineTransactions(transactionsToMine);
         pendingTransactions.subList(0, transactionsToMine.size() - 1).clear();
+        chainPersistenceService.savePendingTransactions(pendingTransactions);
         chainPersistenceService.saveChain(blockchain);
         return block;
     }
@@ -172,6 +176,7 @@ public class BlockchainService {
 
         blockchain.add(block);
         removeMinedPendingTransactions(block);
+        chainPersistenceService.savePendingTransactions(pendingTransactions);
         chainPersistenceService.saveChain(blockchain);
         return true;
     }
@@ -190,6 +195,7 @@ public class BlockchainService {
         mineAndLog(genesisBlock, "genesis");
         blockchain.add(genesisBlock);
         chainPersistenceService.saveChain(blockchain);
+        chainPersistenceService.savePendingTransactions(pendingTransactions);
     }
 
     public synchronized int getDifficulty() {
@@ -252,6 +258,14 @@ public class BlockchainService {
                 .toList();
     }
 
+    public boolean isPersistenceEnabled() {
+        return chainPersistenceService.isEnabled();
+    }
+
+    public String getPersistenceType() {
+        return chainPersistenceService.getType();
+    }
+
     public synchronized void setDifficulty(int difficulty) {
         if (difficulty < 0 || difficulty > 6) {
             throw new IllegalArgumentException("Difficulty must be between 0 and 6");
@@ -290,6 +304,7 @@ public class BlockchainService {
                 .map(Transaction::getTransactionId)
                 .toList();
         pendingTransactions.removeIf(transaction -> minedTransactionIds.contains(transaction.getTransactionId()));
+        chainPersistenceService.savePendingTransactions(pendingTransactions);
     }
 
     private void loadOrReset() {
@@ -299,6 +314,8 @@ public class BlockchainService {
                         chain -> {
                             blockchain.clear();
                             blockchain.addAll(chain);
+                            pendingTransactions.clear();
+                            pendingTransactions.addAll(chainPersistenceService.loadPendingTransactions().orElse(List.of()));
                         },
                         this::reset
                 );

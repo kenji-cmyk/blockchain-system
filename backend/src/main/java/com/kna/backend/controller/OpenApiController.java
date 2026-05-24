@@ -44,6 +44,8 @@ public class OpenApiController {
         paths.put("/api/chain/difficulty", Map.of("put", operation("Update mining difficulty")));
         paths.put("/api/chain/tamper", Map.of("post", operation("Tamper with a block")));
         paths.put("/api/chain/reset", Map.of("post", operation("Reset chain state")));
+        paths.put("/api/ops/health", Map.of("get", operation("View backend health")));
+        paths.put("/api/ops/metrics", Map.of("get", operation("View backend metrics")));
         paths.put("/api/peers", Map.of(
                 "get", operation("View registered simulated peers"),
                 "post", operation("Register a simulated peer")

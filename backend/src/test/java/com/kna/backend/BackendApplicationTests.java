@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -28,11 +29,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
 @SpringBootTest
+@ActiveProfiles("test")
 class BackendApplicationTests {
 
     private final Gson gson = new Gson();
@@ -522,6 +525,24 @@ class BackendApplicationTests {
     }
 
     @Test
+    void exposesOperationsHealthMetricsAndRequestTracing() throws Exception {
+        mockMvc.perform(get("/api/ops/health")
+                        .header("X-Request-Id", "test-request-id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(jsonPath("$.chainValid").value(true))
+                .andExpect(jsonPath("$.persistenceEnabled").value(false))
+                .andExpect(header().string("X-Request-Id", "test-request-id"));
+
+        mockMvc.perform(get("/api/ops/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chainSize").value(1))
+                .andExpect(jsonPath("$.pendingTransactions").value(0))
+                .andExpect(jsonPath("$.cumulativeDifficulty").value(4))
+                .andExpect(jsonPath("$.peers").value(0));
+    }
+
+    @Test
     void canRegisterPeerAndFetchPeerChain() throws Exception {
         mockMvc.perform(post("/api/peers")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -715,6 +736,8 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.paths['/api/wallets/{address}/balance']").exists())
                 .andExpect(jsonPath("$.paths['/api/chain/forks']").exists())
                 .andExpect(jsonPath("$.paths['/api/chain/orphans']").exists())
+                .andExpect(jsonPath("$.paths['/api/ops/health']").exists())
+                .andExpect(jsonPath("$.paths['/api/ops/metrics']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/health']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/discover']").exists())
                 .andExpect(jsonPath("$.paths['/api/peers/{peerId}/sync']").exists());

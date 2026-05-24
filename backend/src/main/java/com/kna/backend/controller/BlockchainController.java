@@ -11,6 +11,8 @@ import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
 import com.kna.backend.dto.MinePeerBlockRequest;
 import com.kna.backend.dto.MineTransactionsRequest;
+import com.kna.backend.dto.OperationHealth;
+import com.kna.backend.dto.OperationMetrics;
 import com.kna.backend.dto.PeerDiscoveryRequest;
 import com.kna.backend.dto.PeerHealth;
 import com.kna.backend.dto.PeerSummary;
@@ -257,6 +259,31 @@ public class BlockchainController {
     @GetMapping("/chain/orphans")
     public List<BlockReference> getOrphanBlocks() {
         return blockchainService.getOrphanBlocks();
+    }
+
+    @GetMapping("/ops/health")
+    public OperationHealth getHealth() {
+        boolean chainValid = blockchainService.isValid();
+        return new OperationHealth(
+                chainValid ? "UP" : "DEGRADED",
+                chainValid,
+                blockchainService.getBlocks().size(),
+                blockchainService.getPendingTransactions().size(),
+                blockchainService.isPersistenceEnabled(),
+                blockchainService.getPersistenceType()
+        );
+    }
+
+    @GetMapping("/ops/metrics")
+    public OperationMetrics getMetrics() {
+        return new OperationMetrics(
+                blockchainService.getBlocks().size(),
+                blockchainService.getPendingTransactions().size(),
+                blockchainService.getCumulativeDifficulty(),
+                blockchainService.getForkBlocks().size(),
+                blockchainService.getOrphanBlocks().size(),
+                peerNodeService.getPeerCount()
+        );
     }
 
     @PutMapping("/chain/difficulty")
