@@ -1,4 +1,6 @@
 package com.kna.backend.dto;
 
-public record RegisterPeerRequest(String peerId) {
+import jakarta.validation.constraints.NotBlank;
+
+public record RegisterPeerRequest(@NotBlank(message = "Peer id must not be blank") String peerId) {
 }

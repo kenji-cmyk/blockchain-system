@@ -67,7 +67,11 @@ class BackendApplicationTests {
     @Test
     void unknownBlockIndexReturnsNotFound() throws Exception {
         mockMvc.perform(get("/api/blocks/99"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Block index does not exist"))
+                .andExpect(jsonPath("$.path").value("/api/blocks/99"));
     }
 
     @Test
@@ -92,7 +96,11 @@ class BackendApplicationTests {
         mockMvc.perform(post("/api/blocks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"data\":\"   \"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.path").value("/api/blocks"));
     }
 
     @Test
@@ -419,6 +427,16 @@ class BackendApplicationTests {
         mockMvc.perform(get("/api/peers"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void exposesOpenApiDocument() throws Exception {
+        mockMvc.perform(get("/api/docs/openapi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").value("3.0.3"))
+                .andExpect(jsonPath("$.info.title").value("Blockchain Learning Backend API"))
+                .andExpect(jsonPath("$.paths['/api/blocks']").exists())
+                .andExpect(jsonPath("$.paths['/api/peers/{peerId}/sync']").exists());
     }
 
     private JsonObject createWallet() throws Exception {

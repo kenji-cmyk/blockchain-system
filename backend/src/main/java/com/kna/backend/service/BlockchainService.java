@@ -4,6 +4,8 @@ import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.pkg.utils.CryptoUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,18 +17,23 @@ import static com.kna.backend.pkg.validate.Validator.isChainValid;
 @Service
 public class BlockchainService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(BlockchainService.class);
+
     private final List<Block> blockchain = new ArrayList<>();
     private final List<Transaction> pendingTransactions = new ArrayList<>();
+    private final ChainPersistenceService chainPersistenceService;
     private int difficulty;
     private final double miningReward;
 
     public BlockchainService(
             @Value("${blockchain.difficulty:3}") int difficulty,
-            @Value("${blockchain.mining-reward:10}") double miningReward
+            @Value("${blockchain.mining-reward:10}") double miningReward,
+            ChainPersistenceService chainPersistenceService
     ) {
         this.miningReward = miningReward;
+        this.chainPersistenceService = chainPersistenceService;
         setDifficulty(difficulty);
-        reset();
+        loadOrReset();
     }
 
     public synchronized List<Block> getBlocks() {
@@ -44,6 +51,7 @@ public class BlockchainService {
         blockchain.clear();
         blockchain.addAll(candidateChain);
         pendingTransactions.clear();
+        chainPersistenceService.saveChain(blockchain);
         return true;
     }
 
@@ -92,6 +100,7 @@ public class BlockchainService {
         transactionsToMine.add(Transaction.miningReward(rewardAddress, miningReward));
         Block block = mineTransactions(transactionsToMine);
         pendingTransactions.clear();
+        chainPersistenceService.saveChain(blockchain);
         return block;
     }
 
@@ -108,8 +117,9 @@ public class BlockchainService {
         blockchain.clear();
         pendingTransactions.clear();
         Block genesisBlock = new Block(0, List.of(Transaction.miningReward("GENESIS", miningReward)), "0");
-        genesisBlock.mineBlock(difficulty);
+        mineAndLog(genesisBlock, "genesis");
         blockchain.add(genesisBlock);
+        chainPersistenceService.saveChain(blockchain);
     }
 
     public synchronized int getDifficulty() {
@@ -142,9 +152,40 @@ public class BlockchainService {
 
         Block previousBlock = blockchain.getLast();
         Block block = new Block(blockchain.size(), transactions, previousBlock.getHash());
-        block.mineBlock(difficulty);
+        mineAndLog(block, "local");
         blockchain.add(block);
+        chainPersistenceService.saveChain(blockchain);
         return block;
+    }
+
+    private void loadOrReset() {
+        chainPersistenceService.loadChain()
+                .filter(chain -> isChainValid(chain, difficulty))
+                .ifPresentOrElse(
+                        chain -> {
+                            blockchain.clear();
+                            blockchain.addAll(chain);
+                        },
+                        this::reset
+                );
+    }
+
+    private void mineAndLog(Block block, String source) {
+        long start = System.currentTimeMillis();
+        int nonceBefore = block.getNonce();
+        block.mineBlock(difficulty);
+        long elapsedMs = System.currentTimeMillis() - start;
+        int nonceCount = block.getNonce() - nonceBefore;
+
+        LOGGER.info(
+                "Mined {} block index={} difficulty={} nonceCount={} elapsedMs={} hash={}",
+                source,
+                block.getIndex(),
+                difficulty,
+                nonceCount,
+                elapsedMs,
+                block.getHash()
+        );
     }
 
     private void validateTransactionInput(String sender, String receiver, double amount, String privateKey) {

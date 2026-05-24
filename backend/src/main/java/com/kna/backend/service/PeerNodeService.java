@@ -4,6 +4,8 @@ import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.SyncResult;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,6 +17,8 @@ import static com.kna.backend.pkg.validate.Validator.isChainValid;
 
 @Service
 public class PeerNodeService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PeerNodeService.class);
 
     private final BlockchainService blockchainService;
     private final Map<String, List<Block>> peerChains = new LinkedHashMap<>();
@@ -46,8 +50,23 @@ public class PeerNodeService {
         Block previousBlock = chain.getLast();
         Transaction reward = Transaction.miningReward(minerAddress, blockchainService.getMiningReward());
         Block block = new Block(chain.size(), List.of(reward), previousBlock.getHash());
+        long start = System.currentTimeMillis();
+        int nonceBefore = block.getNonce();
         block.mineBlock(blockchainService.getDifficulty());
+        long elapsedMs = System.currentTimeMillis() - start;
+        int nonceCount = block.getNonce() - nonceBefore;
         chain.add(block);
+
+        LOGGER.info(
+                "Mined peer block peerId={} index={} difficulty={} nonceCount={} elapsedMs={} hash={}",
+                peerId,
+                block.getIndex(),
+                blockchainService.getDifficulty(),
+                nonceCount,
+                elapsedMs,
+                block.getHash()
+        );
+
         return block;
     }
 

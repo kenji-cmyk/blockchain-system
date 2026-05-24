@@ -1,4 +1,6 @@
 package com.kna.backend.dto;
 
-public record AddBlockRequest(String data) {
+import jakarta.validation.constraints.NotBlank;
+
+public record AddBlockRequest(@NotBlank(message = "Block data must not be blank") String data) {
 }

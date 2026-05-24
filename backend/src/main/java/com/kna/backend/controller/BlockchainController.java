@@ -16,6 +16,7 @@ import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.service.BlockchainService;
 import com.kna.backend.service.PeerNodeService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -57,7 +58,7 @@ public class BlockchainController {
 
     @PostMapping("/blocks")
     @ResponseStatus(HttpStatus.CREATED)
-    public Block addBlock(@RequestBody AddBlockRequest request) {
+    public Block addBlock(@Valid @RequestBody AddBlockRequest request) {
         try {
             return blockchainService.addBlock(request.data());
         } catch (IllegalArgumentException exception) {
@@ -77,7 +78,7 @@ public class BlockchainController {
 
     @PostMapping("/transactions")
     @ResponseStatus(HttpStatus.CREATED)
-    public Transaction createTransaction(@RequestBody CreateTransactionRequest request) {
+    public Transaction createTransaction(@Valid @RequestBody CreateTransactionRequest request) {
         try {
             return blockchainService.createTransaction(
                     request.sender(),
@@ -92,7 +93,7 @@ public class BlockchainController {
 
     @PostMapping("/transactions/mine")
     @ResponseStatus(HttpStatus.CREATED)
-    public Block minePendingTransactions(@RequestBody MineTransactionsRequest request) {
+    public Block minePendingTransactions(@Valid @RequestBody MineTransactionsRequest request) {
         try {
             return blockchainService.minePendingTransactions(request.rewardAddress());
         } catch (IllegalArgumentException exception) {
@@ -102,7 +103,7 @@ public class BlockchainController {
 
     @PostMapping("/peers")
     @ResponseStatus(HttpStatus.CREATED)
-    public PeerSummary registerPeer(@RequestBody RegisterPeerRequest request) {
+    public PeerSummary registerPeer(@Valid @RequestBody RegisterPeerRequest request) {
         try {
             return peerNodeService.registerPeer(request.peerId());
         } catch (IllegalArgumentException exception) {
@@ -128,7 +129,7 @@ public class BlockchainController {
     @ResponseStatus(HttpStatus.CREATED)
     public Block minePeerDemoBlock(
             @PathVariable String peerId,
-            @RequestBody MinePeerBlockRequest request
+            @Valid @RequestBody MinePeerBlockRequest request
     ) {
         try {
             return peerNodeService.mineDemoBlock(peerId, request.minerAddress());
@@ -162,7 +163,7 @@ public class BlockchainController {
     }
 
     @PutMapping("/chain/difficulty")
-    public BlockchainStatus updateDifficulty(@RequestBody DifficultyRequest request) {
+    public BlockchainStatus updateDifficulty(@Valid @RequestBody DifficultyRequest request) {
         try {
             blockchainService.setDifficulty(request.difficulty());
             return getStatus();
@@ -172,7 +173,7 @@ public class BlockchainController {
     }
 
     @PostMapping("/chain/tamper")
-    public BlockchainStatus tamperChain(@RequestBody TamperBlockRequest request) {
+    public BlockchainStatus tamperChain(@Valid @RequestBody TamperBlockRequest request) {
         try {
             blockchainService.tamperBlock(request.index(), request.data());
             return getStatus();
