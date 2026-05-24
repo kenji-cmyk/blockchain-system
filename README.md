@@ -1,6 +1,6 @@
 # Blockchain System
 
-Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot. The goal is to make core blockchain concepts easy to inspect through REST APIs: blocks, hashes, previous hashes, proof-of-work, signed transactions, wallets, balances, fees, mining rewards, pending transactions, simulated peers, HTTP peers, and basic chain synchronization.
+Blockchain System is a learning project that demonstrates a simple blockchain built with Spring Boot and a React/Tailwind client. The goal is to make core blockchain concepts easy to inspect through REST APIs and an interactive web UI: blocks, hashes, previous hashes, proof-of-work, signed transactions, wallets, balances, fees, mining rewards, pending transactions, simulated peers, HTTP peers, basic chain synchronization, persistence, and operational health.
 
 This is not a production blockchain. The project intentionally keeps the architecture small and observable so each concept can be tested, broken, reset, and extended step by step.
 
@@ -37,8 +37,9 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Provides local, test, and docker application profiles.
 - Exposes operations health and metrics APIs.
 - Adds request tracing with `X-Request-Id`.
-- Serves a responsive luminous dark web UI for chain browsing, wallets, transactions, mining, and peer sync demos.
-- Includes CI workflow for backend tests and Docker image build.
+- Serves a responsive luminous dark React/Tailwind web UI for chain browsing, wallets, transactions, mining, and peer sync demos.
+- Organizes the frontend into layout, UI, blockchain, wallet, peer, view, hook, and API helper modules.
+- Includes CI workflow for frontend build, backend tests, and Docker image build.
 - Includes Docker and Docker Compose setup.
 - Includes MockMvc tests for all current APIs.
 
@@ -48,6 +49,14 @@ This is not a production blockchain. The project intentionally keeps the archite
 blockchain-system/
 |-- README.md
 |-- docker-compose.yml
+|-- frontend/
+|   |-- package.json
+|   |-- src/
+|   |   |-- components/
+|   |   |-- hooks/
+|   |   |-- lib/
+|   |   `-- views/
+|   `-- vite.config.js
 `-- backend/
     |-- Dockerfile
     |-- README.md
@@ -62,11 +71,12 @@ blockchain-system/
 Key areas:
 
 - `backend/`: Spring Boot REST API containing the blockchain implementation.
+- `frontend/`: React, Vite, and Tailwind source for the client experience.
 - `backend/README.md`: detailed backend documentation, API examples, configuration, and roadmap.
 - `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
 - `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, balance, and peer sync logic.
 - `backend/src/main/java/com/kna/backend/controller`: REST API controllers and error handling.
-- `backend/src/main/resources/static`: browser client for the Phase 5 client experience.
+- `backend/src/main/resources/static`: built frontend assets served by Spring Boot.
 - `backend/src/test`: API tests.
 
 ## Technology Stack
@@ -77,6 +87,11 @@ Key areas:
 - Gson
 - H2 database
 - JUnit and Spring MockMvc
+- React
+- Vite
+- Tailwind CSS
+- Lucide React icons
+- Node.js and npm
 - Docker and Docker Compose
 - Java Security API for RSA signatures and SHA-256 hashing
 
@@ -110,6 +125,20 @@ The web client runs from the same Spring Boot app at:
 
 ```text
 http://localhost:8080/
+```
+
+Build the frontend from the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+The frontend build writes static assets into:
+
+```text
+backend/src/main/resources/static
 ```
 
 Run the test suite:
@@ -181,12 +210,53 @@ Completed:
 - Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
 - Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
 - Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
-- Phase 5: responsive web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos.
+- Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos.
+- Phase 5.1: frontend source split into focused components, views, hooks, API helpers, and formatting utilities.
 - API tests for all current endpoints.
 
 ## Future Plan
 
-The core learning roadmap through Phase 5 is complete. Future work can move toward a UTXO model, richer peer visualization, authenticated admin controls, or a dedicated frontend build if the client grows beyond a lightweight embedded UI.
+The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
+
+### Phase 6: UTXO and Ledger Hardening
+
+- Replace or complement the account-state balance model with a UTXO model.
+- Add coin selection, change outputs, and spent-output validation.
+- Add transaction dependency validation inside a block.
+- Add replay protection and stronger transaction canonicalization.
+- Add tests that compare account-state and UTXO behavior for common flows.
+
+### Phase 7: Peer-to-Peer Network Upgrade
+
+- Add node identity, peer handshake, and peer capability metadata.
+- Add peer scoring and automatic peer eviction for unhealthy peers.
+- Add periodic background sync and peer discovery refresh.
+- Add gossip-style transaction and block propagation.
+- Add safeguards against duplicate, stale, malformed, or oversized peer messages.
+
+### Phase 8: Security and Admin Controls
+
+- Add authenticated admin routes for reset, tamper, difficulty changes, and peer management.
+- Add role-based access for read-only versus operator actions.
+- Add rate limiting for expensive endpoints such as mining and broadcast.
+- Add stricter request size limits and validation at API boundaries.
+- Add security-focused tests for invalid keys, replayed transactions, and malformed peer payloads.
+
+### Phase 9: Frontend Productization
+
+- Add route-based navigation and deep links for blocks, transactions, wallets, and peers.
+- Add block, transaction, and wallet detail pages.
+- Add loading, empty, error, and retry states for every API-backed panel.
+- Add responsive E2E tests for critical UI flows.
+- Add a frontend CI job for build and browser smoke tests.
+
+### Phase 10: Observability and Release Readiness
+
+- Add actuator-style operational endpoints or richer internal metrics.
+- Add structured event logs for mining, peer sync, broadcasts, rejected blocks, and rejected transactions.
+- Add Docker Compose profiles for multi-node demos.
+- Add release packaging that builds frontend assets before backend packaging.
+- Add production-style configuration documentation and runbooks.
 
 ## Notes
 

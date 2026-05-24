@@ -18,7 +18,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
 - Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
-- Client: Spring Boot serves a lightweight luminous dark UI for exploring the chain, wallets, transactions, mining, and peer sync.
+- Client: Spring Boot serves built React/Tailwind assets for exploring the chain, wallets, transactions, mining, and peer sync.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
@@ -458,7 +458,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/ApiExceptionHandler.java`: unified API error responses.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
-- `resources/static/`: Phase 5 browser client assets.
+- `resources/static/`: built React/Tailwind client assets generated from the root `frontend/` project.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
@@ -539,6 +539,47 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - [x] Show wallet balances, pending outgoing transactions, fees, and miner rewards.
 - [x] Show mining progress, nonce count, and chain validity.
 - [x] Visualize peer chains and conflict resolution.
+- [x] Rebuild the client with React, Vite, Tailwind CSS, and reusable components.
+
+### Phase 6: UTXO and Ledger Hardening
+
+- [ ] Add a UTXO model alongside or instead of the current account-state balance model.
+- [ ] Add coin selection, change outputs, and spent-output validation.
+- [ ] Validate transaction dependencies within the same block.
+- [ ] Harden transaction canonicalization and replay protection.
+- [ ] Add ledger-level tests for double-spend and invalid-output scenarios.
+
+### Phase 7: Peer-to-Peer Network Upgrade
+
+- [ ] Add node identity, peer handshake, and peer capability metadata.
+- [ ] Add peer scoring and automatic unhealthy peer eviction.
+- [ ] Add scheduled peer discovery and background sync.
+- [ ] Add gossip-style block and transaction propagation.
+- [ ] Reject duplicate, stale, malformed, or oversized peer messages.
+
+### Phase 8: Security and Admin Controls
+
+- [ ] Protect reset, tamper, difficulty, and peer-management endpoints with authentication.
+- [ ] Add role-based access for read-only and operator actions.
+- [ ] Add rate limiting for expensive or state-changing APIs.
+- [ ] Add stricter request size limits and validation at system boundaries.
+- [ ] Add security tests for malformed keys, replayed transactions, and hostile peer payloads.
+
+### Phase 9: Frontend Productization
+
+- [ ] Add route-based navigation for blocks, transactions, wallets, and peers.
+- [ ] Add detail views for individual blocks, transactions, wallets, and peers.
+- [ ] Add consistent loading, empty, error, and retry states.
+- [ ] Add browser smoke tests for the main client workflows.
+- [ ] Add a frontend CI step for build and UI verification.
+
+### Phase 10: Observability and Release Readiness
+
+- [ ] Add richer metrics for mining, validation, peer sync, and broadcasts.
+- [ ] Add structured event logs for rejected blocks and rejected transactions.
+- [ ] Add multi-node Docker Compose demo profiles.
+- [ ] Package backend releases only after frontend assets are built.
+- [ ] Add production-style configuration notes and runbooks.
 
 ### Section D: Code Quality and Observability
 
