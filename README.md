@@ -210,9 +210,7 @@ Completed:
 - Phase 2: HTTP peer registration, health checks, peer discovery, peer removal, transaction broadcast, block broadcast, and peer sync timeout/retry handling.
 - Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
 - Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
-- Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos.
-- Phase 5.1: frontend source split into focused components, views, hooks, API helpers, and formatting utilities.
-- API tests for all current endpoints.
+- Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos, frontend source split into focused components, views, hooks, API helpers, and formatting utilities, API tests for all current endpoints.
 
 ## Future Plan
 
