@@ -2,36 +2,28 @@ package com.kna.backend.pkg.validate;
 
 import com.kna.backend.entity.Block;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public class Validator {
 
-    public static Boolean isChainValid(ArrayList<Block> blockChain, int difficulty){
-        Block currentBlock;
-        Block previousBlock;
-        String hashTarget = new String(new char[difficulty]).replace('\0', '0');
+    public static boolean isChainValid(List<Block> blockChain, int difficulty) {
+        String hashTarget = "0".repeat(difficulty);
 
-        for (int i = 1; i < blockChain.size(); ++i){
+        for (int i = 0; i < blockChain.size(); ++i) {
+            Block currentBlock = blockChain.get(i);
 
-            currentBlock = blockChain.get(i);
-
-            previousBlock = blockChain.get(i - 1);
-
-            if(!currentBlock.hash.equals(currentBlock.calculateHash())){
-                System.out.println("Current Hash not equals");
+            if (!currentBlock.getHash().equals(currentBlock.calculateHash())) {
                 return false;
             }
 
-            if(!previousBlock.hash.equals(currentBlock.previousHash) ) {
-                System.out.println("Previous Hashes not equal");
+            if (!currentBlock.getHash().startsWith(hashTarget)) {
                 return false;
             }
 
-            if(!currentBlock.hash.substring( 0, difficulty).equals(hashTarget)) {
-                System.out.println("This block hasn't been mined");
+            String expectedPreviousHash = i == 0 ? "0" : blockChain.get(i - 1).getHash();
+            if (!expectedPreviousHash.equals(currentBlock.getPreviousHash())) {
                 return false;
             }
-
         }
 
         return true;
