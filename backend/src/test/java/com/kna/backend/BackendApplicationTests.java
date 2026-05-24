@@ -64,10 +64,9 @@ class BackendApplicationTests {
     void servesClientExperience() throws Exception {
         mockMvc.perform(get("/index.html"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("LuminousChain Client")))
-                .andExpect(content().string(containsString("id=\"blockTimeline\"")))
-                .andExpect(content().string(containsString("id=\"transactionForm\"")))
-                .andExpect(content().string(containsString("id=\"peerForm\"")));
+                .andExpect(content().string(containsString("LuminousChain Console")))
+                .andExpect(content().string(containsString("id=\"root\"")))
+                .andExpect(content().string(containsString("/assets/index-")));
     }
 
     @Test

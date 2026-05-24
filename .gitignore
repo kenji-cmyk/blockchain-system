@@ -32,6 +32,11 @@ build/
 ### VS Code ###
 .vscode/
 
+### Frontend ###
+node_modules/
+frontend/dist/
+.playwright-mcp/
+
 ### Local application config ###
 src/main/resources/application.properties
 
