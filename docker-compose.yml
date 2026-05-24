@@ -1,0 +1,15 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      BLOCKCHAIN_PERSISTENCE_ENABLED: "true"
+      BLOCKCHAIN_PERSISTENCE_TYPE: "database"
+      SPRING_DATASOURCE_URL: "jdbc:h2:file:/data/blockchain-db"
+    volumes:
+      - blockchain-data:/data
+
+volumes:
+  blockchain-data:
