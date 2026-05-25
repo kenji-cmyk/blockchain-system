@@ -100,7 +100,7 @@ public class PeerNodeService {
                 normalizedBaseUrl == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
         );
         if (normalizedBaseUrl == null) {
-            peer.recordHandshake(new NodeInfo(peerId, appVersion(), localCapabilities, peer.simulatedChain().size(), cumulativeDifficulty(peer.simulatedChain())));
+            peer.recordHandshake(new NodeInfo(peerId, appVersion(), localCapabilities, peer.simulatedChain().size(), cumulativeDifficulty(peer.simulatedChain(), blockchainService.getDifficulty())));
         } else {
             handshake(peer);
         }
@@ -203,7 +203,7 @@ public class PeerNodeService {
             message = "Local chain replaced with stronger valid peer chain";
         } else if (!peerValid) {
             message = "Peer chain is invalid";
-        } else if (cumulativeDifficulty(peerChain) <= blockchainService.getCumulativeDifficulty()) {
+        } else if (cumulativeDifficulty(peerChain, blockchainService.getDifficulty()) <= blockchainService.getCumulativeDifficulty()) {
             message = "Local chain has at least as much cumulative difficulty as the peer chain";
         } else {
             message = "Peer chain was not adopted";
@@ -547,7 +547,7 @@ public class PeerNodeService {
                             peer.baseUrl() == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
                     );
                     if (peer.baseUrl() == null) {
-                        node.recordHandshake(new NodeInfo(peer.peerId(), appVersion(), localCapabilities, node.simulatedChain().size(), cumulativeDifficulty(node.simulatedChain())));
+                        node.recordHandshake(new NodeInfo(peer.peerId(), appVersion(), localCapabilities, node.simulatedChain().size(), cumulativeDifficulty(node.simulatedChain(), blockchainService.getDifficulty())));
                     }
                     peers.put(peer.peerId(), node);
                 });

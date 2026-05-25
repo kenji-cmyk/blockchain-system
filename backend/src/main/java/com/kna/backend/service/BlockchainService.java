@@ -68,7 +68,7 @@ public class BlockchainService {
             rememberCandidateBlocks(candidateChain);
             return false;
         }
-        if (cumulativeDifficulty(candidateChain) <= cumulativeDifficulty(blockchain)) {
+        if (cumulativeDifficulty(candidateChain, difficulty) <= cumulativeDifficulty(blockchain, difficulty)) {
             rememberCandidateBlocks(candidateChain);
             return false;
         }
@@ -236,7 +236,7 @@ public class BlockchainService {
     }
 
     public synchronized long getCumulativeDifficulty() {
-        return cumulativeDifficulty(blockchain);
+        return cumulativeDifficulty(blockchain, difficulty);
     }
 
     public synchronized List<BlockReference> getForkBlocks() {

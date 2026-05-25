@@ -69,6 +69,13 @@ public class Validator {
                 .sum();
     }
 
+    public static long cumulativeDifficulty(List<Block> blockChain, int difficulty) {
+        int cappedDifficulty = Math.min(Math.max(difficulty, 0), 30);
+        return blockChain.stream()
+                .mapToLong(block -> Math.max(1L, 1L << Math.min(countLeadingZeros(block.getHash()), cappedDifficulty)))
+                .sum();
+    }
+
     public static int countLeadingZeros(String hash) {
         int count = 0;
         while (count < hash.length() && hash.charAt(count) == '0') {
