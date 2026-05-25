@@ -2,8 +2,9 @@ package com.kna.backend.pkg.validate;
 
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
+import com.kna.backend.entity.UtxoEntry;
+import com.kna.backend.entity.UtxoKey;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +27,7 @@ public class Validator {
             double miningReward
     ) {
         String hashTarget = "0".repeat(difficulty);
-        Map<String, Double> balances = new HashMap<>();
+        Map<UtxoKey, UtxoEntry> utxos = UtxoLedger.mutableCopy(Map.of());
         Set<String> transactionIds = new HashSet<>();
 
         for (int i = 0; i < blockChain.size(); ++i) {
@@ -54,7 +55,7 @@ public class Validator {
                 return false;
             }
 
-            if (!validateAndApplyTransactions(transactions, balances, transactionIds, miningReward)) {
+            if (!UtxoLedger.applyBlock(transactions, utxos, transactionIds, miningReward)) {
                 return false;
             }
         }
@@ -76,50 +77,4 @@ public class Validator {
         return count;
     }
 
-    private static boolean validateAndApplyTransactions(
-            List<Transaction> transactions,
-            Map<String, Double> balances,
-            Set<String> transactionIds,
-            double miningReward
-    ) {
-        double fees = 0;
-        int rewardCount = 0;
-        double rewardAmount = 0;
-
-        for (Transaction transaction : transactions) {
-            if (!transactionIds.add(transaction.getTransactionId())) {
-                return false;
-            }
-
-            if (transaction.isMiningReward()) {
-                rewardCount++;
-                rewardAmount += transaction.getAmount();
-                continue;
-            }
-
-            double totalCost = transaction.getAmount() + transaction.getFee();
-            double senderBalance = balances.getOrDefault(transaction.getSender(), 0.0);
-            if (senderBalance < totalCost) {
-                return false;
-            }
-            balances.put(transaction.getSender(), senderBalance - totalCost);
-            balances.merge(transaction.getReceiver(), transaction.getAmount(), Double::sum);
-            fees += transaction.getFee();
-        }
-
-        if (rewardCount > 1) {
-            return false;
-        }
-        if (!Double.isNaN(miningReward) && rewardCount == 1 && rewardAmount > miningReward + fees) {
-            return false;
-        }
-
-        for (Transaction transaction : transactions) {
-            if (transaction.isMiningReward()) {
-                balances.merge(transaction.getReceiver(), transaction.getAmount(), Double::sum);
-            }
-        }
-
-        return true;
-    }
 }

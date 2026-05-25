@@ -16,7 +16,9 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Generates URL-safe RSA wallet public/private key pairs.
 - Creates and signs transactions.
 - Supports optional transaction fees.
-- Derives wallet balances from committed chain history.
+- Derives wallet balances from committed unspent transaction outputs.
+- Selects spendable outputs, creates change outputs, and rejects spent-output reuse.
+- Validates transaction dependencies inside each block.
 - Rejects transactions when the sender cannot cover amount plus fee.
 - Stores new transactions in a pending transaction pool.
 - Shows available wallet balance after subtracting pending outgoing transactions.
@@ -189,14 +191,15 @@ Important endpoints:
 
 ## Balance Model
 
-The project currently uses an account-state model derived from chain history:
+The project now uses a UTXO ledger derived from chain history while keeping the REST API account-like for learning:
 
-- Mining rewards add balance to the reward receiver.
-- A normal transaction subtracts `amount + fee` from the sender.
-- A normal transaction adds `amount` to the receiver.
+- Mining rewards create spendable outputs for the reward receiver.
+- A normal transaction spends one or more existing outputs owned by the sender.
+- A normal transaction creates a receiver output for `amount` and, when needed, a sender change output.
+- The transaction fee is the selected input total minus the output total.
 - Pending outgoing transactions are subtracted from the available balance so the sender cannot overspend before mining.
 
-This is simpler than a UTXO model and fits the learning API well because balances can be explained by replaying the chain from genesis. The tradeoff is that it does not model individual spendable outputs, coin selection, or UTXO set validation the way Bitcoin-like systems do. A UTXO model is a good future step when the project moves toward stronger consensus validation.
+This keeps the UI and request payloads approachable while giving validation Bitcoin-like ledger properties: spent-output rejection, same-block dependency handling, replay protection through unique transaction ids, and canonical signatures over inputs and outputs.
 
 ## Current Status
 
@@ -211,18 +214,11 @@ Completed:
 - Phase 3: transaction-history replay validation, cumulative-difficulty chain selection, fork and orphan tracking, duplicate mempool rules, and deterministic block hash serialization.
 - Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
 - Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos, frontend source split into focused components, views, hooks, API helpers, and formatting utilities, API tests for all current endpoints.
+- Phase 6: UTXO ledger replay, coin selection, change outputs, spent-output validation, same-block transaction dependency validation, stronger transaction canonicalization, and ledger-level hardening tests.
 
 ## Future Plan
 
 The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
-
-### Phase 6: UTXO and Ledger Hardening
-
-- Replace or complement the account-state balance model with a UTXO model.
-- Add coin selection, change outputs, and spent-output validation.
-- Add transaction dependency validation inside a block.
-- Add replay protection and stronger transaction canonicalization.
-- Add tests that compare account-state and UTXO behavior for common flows.
 
 ### Phase 7: Peer-to-Peer Network Upgrade
 

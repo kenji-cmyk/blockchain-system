@@ -3,8 +3,13 @@ package com.kna.backend.service;
 import com.kna.backend.dto.BlockReference;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
+import com.kna.backend.entity.TransactionInput;
+import com.kna.backend.entity.TransactionOutput;
+import com.kna.backend.entity.UtxoEntry;
+import com.kna.backend.entity.UtxoKey;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.pkg.utils.CryptoUtil;
+import com.kna.backend.pkg.validate.UtxoLedger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.kna.backend.pkg.validate.Validator.cumulativeDifficulty;
 import static com.kna.backend.pkg.validate.Validator.isChainValid;
@@ -96,7 +102,7 @@ public class BlockchainService {
     public synchronized Transaction createTransaction(String sender, String receiver, double amount, double fee, String privateKey) {
         validateTransactionInput(sender, receiver, amount, fee, privateKey);
 
-        Transaction transaction = new Transaction(sender, receiver, amount, fee);
+        Transaction transaction = createUtxoTransaction(sender, receiver, amount, fee);
         transaction.sign(privateKey);
         return addPendingTransaction(transaction);
     }
@@ -112,9 +118,8 @@ public class BlockchainService {
             return transaction;
         }
 
-        double availableBalance = getAvailableBalance(transaction.getSender());
-        double totalCost = transaction.getAmount() + transaction.getFee();
-        if (availableBalance < totalCost) {
+        Map<UtxoKey, UtxoEntry> pendingLedger = ledgerAfterPendingTransactions();
+        if (!UtxoLedger.applyPendingTransaction(transaction, pendingLedger)) {
             throw new IllegalArgumentException("Sender balance is insufficient");
         }
 
@@ -213,24 +218,12 @@ public class BlockchainService {
     public synchronized double getBalance(String address) {
         validateData(address);
         double balance = 0;
-        for (Block block : blockchain) {
-            for (Transaction transaction : block.getTransactions()) {
-                if (transaction.isMiningReward()) {
-                    if (address.equals(transaction.getReceiver())) {
-                        balance += transaction.getAmount();
-                    }
-                    continue;
-                }
-
-                if (address.equals(transaction.getSender())) {
-                    balance -= transaction.getAmount() + transaction.getFee();
-                }
-                if (address.equals(transaction.getReceiver())) {
-                    balance += transaction.getAmount();
-                }
-            }
+        try {
+            balance = UtxoLedger.balanceOf(UtxoLedger.replay(blockchain, miningReward), address);
+            return balance;
+        } catch (IllegalArgumentException exception) {
+            return balance;
         }
-        return balance;
     }
 
     public synchronized double getAvailableBalance(String address) {
@@ -288,13 +281,59 @@ public class BlockchainService {
         if (transactions.size() > maxTransactionsPerBlock) {
             throw new IllegalArgumentException("Block exceeds the transaction count limit");
         }
-
+        List<Block> candidateChain = new ArrayList<>(blockchain);
         Block previousBlock = blockchain.getLast();
         Block block = new Block(blockchain.size(), transactions, previousBlock.getHash());
         mineAndLog(block, "local");
+        candidateChain.add(block);
+
+        if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
+            throw new IllegalArgumentException("Block contains invalid ledger transitions");
+        }
         blockchain.add(block);
         chainPersistenceService.saveChain(blockchain);
         return block;
+    }
+
+    private Transaction createUtxoTransaction(String sender, String receiver, double amount, double fee) {
+        Map<UtxoKey, UtxoEntry> ledger = ledgerAfterPendingTransactions();
+        double requiredAmount = amount + fee;
+        double selectedAmount = 0;
+        List<TransactionInput> inputs = new ArrayList<>();
+
+        for (UtxoEntry entry : ledger.values()) {
+            if (!sender.equals(entry.owner())) {
+                continue;
+            }
+            inputs.add(new TransactionInput(entry.transactionId(), entry.outputIndex()));
+            selectedAmount += entry.amount();
+            if (selectedAmount + 0.00000001 >= requiredAmount) {
+                break;
+            }
+        }
+
+        if (selectedAmount + 0.00000001 < requiredAmount) {
+            throw new IllegalArgumentException("Sender balance is insufficient");
+        }
+
+        List<TransactionOutput> outputs = new ArrayList<>();
+        outputs.add(new TransactionOutput(receiver, amount));
+        double change = selectedAmount - requiredAmount;
+        if (change > 0.00000001) {
+            outputs.add(new TransactionOutput(sender, change));
+        }
+
+        return new Transaction(sender, receiver, amount, fee, inputs, outputs);
+    }
+
+    private Map<UtxoKey, UtxoEntry> ledgerAfterPendingTransactions() {
+        Map<UtxoKey, UtxoEntry> ledger = UtxoLedger.mutableCopy(UtxoLedger.replay(blockchain, miningReward));
+        for (Transaction pendingTransaction : pendingTransactions) {
+            if (!UtxoLedger.applyPendingTransaction(pendingTransaction, ledger)) {
+                throw new IllegalArgumentException("Pending transaction pool contains invalid ledger transitions");
+            }
+        }
+        return ledger;
     }
 
     private void removeMinedPendingTransactions(Block block) {

@@ -1,6 +1,6 @@
 # Blockchain Learning Backend
 
-This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, account-state balances, transaction fees, a pending transaction pool, mining rewards, simulated peers, HTTP peers, and basic chain synchronization.
+This Spring Boot backend demonstrates a simple in-memory blockchain for learning core concepts: blocks, hashes, previous hashes, nonce, proof-of-work mining, chain validation, signed transactions, wallets, UTXO ledger balances, transaction fees, a pending transaction pool, mining rewards, simulated peers, HTTP peers, and basic chain synchronization.
 
 ## Current Status
 
@@ -8,9 +8,9 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Storage: in-memory by default. Optional file persistence or normalized H2 database persistence can be enabled with configuration.
 - Block data: each block contains a list of `Transaction` objects.
 - Wallets: generated RSA public/private key pairs returned as URL-safe Base64 strings.
-- Transactions: sender, receiver, amount, optional fee, timestamp, transaction id, and digital signature.
-- Balances: derived by replaying committed chain history, with pending outgoing transactions subtracted from the available balance.
-- Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, every transaction signature must be valid, and each block must stay within the configured transaction count limit.
+- Transactions: sender, receiver, amount, optional fee, timestamp, transaction id, nonce, UTXO inputs, outputs, and digital signature.
+- Balances: derived by replaying committed unspent transaction outputs, with pending outgoing transactions subtracted from the available balance.
+- Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, every transaction signature must be valid, spent outputs must not be reused, same-block dependencies must be valid, and each block must stay within the configured transaction count limit.
 - Genesis block: created automatically on startup and when the reset API is called.
 - Peer sync: simulated peers run inside the same application, and HTTP peers can point to other running backend instances for multi-instance demos.
 - Peer networking: HTTP peers support health checks, discovery by URL, removal, transaction broadcast, block broadcast, and configurable timeout/retry handling.
@@ -104,7 +104,7 @@ Content-Type: application/json
 }
 ```
 
-The sender must have enough available balance to cover `amount + fee`. The `fee` field is optional and defaults to `0`.
+The sender must have enough available balance to cover `amount + fee`. The `fee` field is optional and defaults to `0`. The service selects spendable outputs and creates a change output automatically, so clients do not need to submit UTXO inputs directly.
 
 ### View Wallet Balance
 
@@ -450,9 +450,10 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 ## Code Structure
 
 - `entity/Block.java`: block model, transaction list, hash calculation, mining, and tamper marker.
-- `entity/Transaction.java`: transaction model, signing, signature verification, and mining reward transactions.
+- `entity/Transaction.java`: transaction model, UTXO inputs/outputs, signing, signature verification, and mining reward transactions.
+- `entity/TransactionInput.java`, `TransactionOutput.java`, `UtxoEntry.java`, `UtxoKey.java`: immutable ledger value objects.
 - `entity/Wallet.java`: public/private key pair response model.
-- `service/BlockchainService.java`: in-memory chain, pending transaction pool, account-state balances, fees, block mining, validation, difficulty, and reset logic.
+- `service/BlockchainService.java`: in-memory chain, pending transaction pool, UTXO coin selection, balances, fees, block mining, validation, difficulty, and reset logic.
 - `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
 - `service/PeerNodeService.java`: simulated peers, HTTP peers, health checks, discovery, broadcasts, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
@@ -462,9 +463,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
+- `pkg/validate/UtxoLedger.java`: UTXO replay, spent-output validation, same-block dependency checks, fee accounting, and balance calculation.
 - `dto/*`: request/response records for the API.
 - `BackendApplicationTests.java`: MockMvc tests for block, chain, wallet, transaction, and mining workflows.
 - `DatabasePersistenceTests.java`: database-mode persistence tests for normalized tables.
+- `LedgerValidationTests.java`: ledger-level tests for UTXO dependencies, double-spend rejection, and invalid output canonicalization.
 
 ## Roadmap
 
@@ -543,11 +546,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ### Phase 6: UTXO and Ledger Hardening
 
-- [ ] Add a UTXO model alongside or instead of the current account-state balance model.
-- [ ] Add coin selection, change outputs, and spent-output validation.
-- [ ] Validate transaction dependencies within the same block.
-- [ ] Harden transaction canonicalization and replay protection.
-- [ ] Add ledger-level tests for double-spend and invalid-output scenarios.
+- [x] Add a UTXO model alongside or instead of the current account-state balance model.
+- [x] Add coin selection, change outputs, and spent-output validation.
+- [x] Validate transaction dependencies within the same block.
+- [x] Harden transaction canonicalization and replay protection.
+- [x] Add ledger-level tests for double-spend and invalid-output scenarios.
 
 ### Phase 7: Peer-to-Peer Network Upgrade
 
