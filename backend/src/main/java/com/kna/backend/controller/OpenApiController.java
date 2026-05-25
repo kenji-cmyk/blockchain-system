@@ -46,6 +46,7 @@ public class OpenApiController {
         paths.put("/api/chain/reset", Map.of("post", operation("Reset chain state")));
         paths.put("/api/ops/health", Map.of("get", operation("View backend health")));
         paths.put("/api/ops/metrics", Map.of("get", operation("View backend metrics")));
+        paths.put("/api/node/info", Map.of("get", operation("View local node identity and capabilities")));
         paths.put("/api/peers", Map.of(
                 "get", operation("View registered simulated peers"),
                 "post", operation("Register a simulated peer")

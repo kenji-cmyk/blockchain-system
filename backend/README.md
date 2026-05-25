@@ -13,7 +13,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, every transaction signature must be valid, spent outputs must not be reused, same-block dependencies must be valid, and each block must stay within the configured transaction count limit.
 - Genesis block: created automatically on startup and when the reset API is called.
 - Peer sync: simulated peers run inside the same application, and HTTP peers can point to other running backend instances for multi-instance demos.
-- Peer networking: HTTP peers support health checks, discovery by URL, removal, transaction broadcast, block broadcast, and configurable timeout/retry handling.
+- Peer networking: HTTP peers support node-info handshakes, capability metadata, health checks, discovery by URL, removal, scoring, automatic unhealthy-peer eviction, transaction gossip, block gossip, and configurable timeout/retry handling.
 - Error handling: API errors return a unified JSON format.
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
@@ -22,8 +22,12 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
+- Default node id: generated at startup unless `blockchain.node.id` is set.
 - Default peer timeout: `blockchain.peer.timeout-ms=1500`.
 - Default peer retry attempts: `blockchain.peer.retry-attempts=2`.
+- Default peer eviction score: `blockchain.peer.eviction-score=-3`.
+- Default peer message size limit: `blockchain.peer.max-message-bytes=65536`.
+- Scheduled peer sync is disabled by default with `blockchain.peer.scheduled-sync.enabled=false`.
 
 ## Running the Project
 
@@ -237,6 +241,14 @@ GET /api/docs/openapi
 
 This returns an OpenAPI 3.0 JSON document for the available learning APIs.
 
+### View Node Info
+
+```http
+GET /api/node/info
+```
+
+This returns the local node identity, backend version, advertised capabilities, chain size, and cumulative difficulty. HTTP peer registration uses this endpoint as a handshake when the remote node supports it.
+
 ### Register a Peer
 
 Without `baseUrl`, this creates a simulated peer inside the same application and initializes its chain from the current local chain.
@@ -280,7 +292,7 @@ Example response:
 ]
 ```
 
-HTTP peer summaries include `baseUrl`, `healthy`, and `mode`.
+HTTP peer summaries include `baseUrl`, `healthy`, and `mode`. Phase 7 summaries also include `nodeId`, `capabilities`, `score`, `failureCount`, and `lastSeenAt`.
 
 ### Discover Peers
 
@@ -304,7 +316,7 @@ Content-Type: application/json
 GET /api/peers/{peerId}/health
 ```
 
-For HTTP peers, health calls the peer's `GET /api/chain/status` endpoint with the configured timeout and retry settings.
+For HTTP peers, health calls the peer's `GET /api/chain/status` endpoint with the configured timeout and retry settings. Successful checks increase peer score; failed checks decrease score and can evict the peer when it reaches `blockchain.peer.eviction-score`.
 
 ### Remove a Peer
 
@@ -359,7 +371,7 @@ Example response:
 POST /api/peers/broadcast/transactions
 ```
 
-This sends every local pending transaction to registered HTTP peers through `POST /api/transactions/broadcast`.
+This sends every local pending transaction to registered HTTP peers through `POST /api/transactions/broadcast`. Outbound peer messages include `X-Node-Id` and `X-Gossip-Id` headers so peers can deduplicate and relay messages safely.
 
 ### Accept a Broadcast Transaction
 
@@ -368,7 +380,7 @@ POST /api/transactions/broadcast
 Content-Type: application/json
 ```
 
-The request body is a signed `Transaction`. The local node validates the signature and available sender balance before adding it to the pending transaction pool.
+The request body is a signed `Transaction`. The local node validates the signature and available sender balance before adding it to the pending transaction pool. Accepted peer transactions are relayed to other HTTP peers with the same gossip id when one is supplied.
 
 ### Accept a Broadcast Block
 
@@ -377,7 +389,7 @@ POST /api/blocks/broadcast
 Content-Type: application/json
 ```
 
-The request body is a mined `Block`. The local node accepts it only when it extends the current chain and passes chain validation.
+The request body is a mined `Block`. The local node accepts it only when it extends the current chain and passes chain validation. Accepted peer blocks are relayed to other HTTP peers with the same gossip id when one is supplied. Duplicate gossip ids, stale blocks, malformed JSON, and oversized bodies are rejected or ignored before they can alter local chain state.
 
 ### Legacy Demo Block Endpoint
 
@@ -455,7 +467,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `entity/Wallet.java`: public/private key pair response model.
 - `service/BlockchainService.java`: in-memory chain, pending transaction pool, UTXO coin selection, balances, fees, block mining, validation, difficulty, and reset logic.
 - `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
-- `service/PeerNodeService.java`: simulated peers, HTTP peers, health checks, discovery, broadcasts, peer mining, and conflict resolution.
+- `service/PeerNodeService.java`: simulated peers, HTTP peers, node-info handshakes, capability metadata, scoring, eviction, scheduled sync, gossip broadcasts, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/ApiExceptionHandler.java`: unified API error responses.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
@@ -468,6 +480,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `BackendApplicationTests.java`: MockMvc tests for block, chain, wallet, transaction, and mining workflows.
 - `DatabasePersistenceTests.java`: database-mode persistence tests for normalized tables.
 - `LedgerValidationTests.java`: ledger-level tests for UTXO dependencies, double-spend rejection, and invalid output canonicalization.
+- `PeerNetworkPhase7Tests.java`: peer-network tests for node info, handshake metadata, gossip headers, unhealthy-peer eviction, and hostile peer payload rejection.
 
 ## Roadmap
 
@@ -554,11 +567,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ### Phase 7: Peer-to-Peer Network Upgrade
 
-- [ ] Add node identity, peer handshake, and peer capability metadata.
-- [ ] Add peer scoring and automatic unhealthy peer eviction.
-- [ ] Add scheduled peer discovery and background sync.
-- [ ] Add gossip-style block and transaction propagation.
-- [ ] Reject duplicate, stale, malformed, or oversized peer messages.
+- [x] Add node identity, peer handshake, and peer capability metadata.
+- [x] Add peer scoring and automatic unhealthy peer eviction.
+- [x] Add scheduled peer discovery and background sync.
+- [x] Add gossip-style block and transaction propagation.
+- [x] Reject duplicate, stale, malformed, or oversized peer messages.
 
 ### Phase 8: Security and Admin Controls
 

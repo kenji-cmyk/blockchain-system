@@ -26,9 +26,12 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Limits the number of transactions that can be included in one block.
 - Supports simulated peer nodes inside the same app.
 - Supports HTTP-based peer registration for multi-instance demos.
+- Exposes node identity and capability metadata for peer handshakes.
 - Checks peer health and removes peers from the local registry.
+- Scores peers and evicts unhealthy HTTP peers after repeated failures.
 - Discovers peers from configured peer URLs.
-- Broadcasts pending transactions and newly mined blocks to HTTP peers.
+- Gossips pending transactions and newly mined blocks to HTTP peers with duplicate-message guards.
+- Rejects stale, malformed, and oversized peer messages.
 - Uses configurable peer request timeout and retry attempts.
 - Resolves conflicts by adopting a longer valid peer chain.
 - Exposes a tamper API for validation demos.
@@ -176,6 +179,7 @@ Important endpoints:
 - `POST /api/chain/reset`: reset chain state.
 - `GET /api/ops/health`: view backend health.
 - `GET /api/ops/metrics`: view backend metrics.
+- `GET /api/node/info`: view node identity and advertised peer capabilities.
 - `POST /api/peers`: register a simulated peer or HTTP peer.
 - `GET /api/peers`: list registered peers.
 - `POST /api/peers/discover`: register peers from base URLs.
@@ -215,18 +219,11 @@ Completed:
 - Phase 4: normalized database persistence for blocks, transactions, wallets, peers, and mempool state; schema migration tracking; local/test/docker profiles; health and metrics APIs; request tracing; and CI workflow.
 - Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos, frontend source split into focused components, views, hooks, API helpers, and formatting utilities, API tests for all current endpoints.
 - Phase 6: UTXO ledger replay, coin selection, change outputs, spent-output validation, same-block transaction dependency validation, stronger transaction canonicalization, and ledger-level hardening tests.
+- Phase 7: node identity and capability handshakes, peer scoring and unhealthy-peer eviction, optional scheduled sync, gossip headers and relay, and peer message safeguards for duplicate, stale, malformed, and oversized payloads.
 
 ## Future Plan
 
 The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
-
-### Phase 7: Peer-to-Peer Network Upgrade
-
-- Add node identity, peer handshake, and peer capability metadata.
-- Add peer scoring and automatic peer eviction for unhealthy peers.
-- Add periodic background sync and peer discovery refresh.
-- Add gossip-style transaction and block propagation.
-- Add safeguards against duplicate, stale, malformed, or oversized peer messages.
 
 ### Phase 8: Security and Admin Controls
 

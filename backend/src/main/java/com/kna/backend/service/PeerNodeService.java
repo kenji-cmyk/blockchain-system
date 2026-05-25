@@ -1,8 +1,10 @@
 package com.kna.backend.service;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.kna.backend.dto.BroadcastResult;
+import com.kna.backend.dto.NodeInfo;
 import com.kna.backend.dto.PersistedPeer;
 import com.kna.backend.dto.PeerHealth;
 import com.kna.backend.dto.PeerSummary;
@@ -12,6 +14,7 @@ import com.kna.backend.entity.Transaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Type;
@@ -20,10 +23,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static com.kna.backend.pkg.validate.Validator.cumulativeDifficulty;
 import static com.kna.backend.pkg.validate.Validator.isChainValid;
@@ -42,17 +49,42 @@ public class PeerNodeService {
     private final HttpClient httpClient;
     private final Duration timeout;
     private final int retryAttempts;
+    private final String nodeId;
+    private final int evictionScore;
+    private final int maxMessageBytes;
+    private final boolean scheduledSyncEnabled;
+    private final Set<String> seenGossipIds = new HashSet<>();
+    private final List<String> localCapabilities = List.of(
+            "node-info",
+            "health-check",
+            "peer-discovery",
+            "scheduled-sync",
+            "gossip-broadcast",
+            "block-broadcast",
+            "transaction-broadcast",
+            "utxo-ledger"
+    );
 
     public PeerNodeService(
             BlockchainService blockchainService,
             ChainPersistenceService chainPersistenceService,
             @Value("${blockchain.peer.timeout-ms:1500}") long timeoutMs,
-            @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts
+            @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts,
+            @Value("${blockchain.node.id:}") String configuredNodeId,
+            @Value("${blockchain.peer.eviction-score:-3}") int evictionScore,
+            @Value("${blockchain.peer.max-message-bytes:65536}") int maxMessageBytes,
+            @Value("${blockchain.peer.scheduled-sync.enabled:false}") boolean scheduledSyncEnabled
     ) {
         this.blockchainService = blockchainService;
         this.chainPersistenceService = chainPersistenceService;
         this.timeout = Duration.ofMillis(timeoutMs);
         this.retryAttempts = Math.max(1, retryAttempts);
+        this.nodeId = configuredNodeId == null || configuredNodeId.isBlank()
+                ? "node-" + UUID.randomUUID()
+                : configuredNodeId.strip();
+        this.evictionScore = evictionScore;
+        this.maxMessageBytes = Math.max(128, maxMessageBytes);
+        this.scheduledSyncEnabled = scheduledSyncEnabled;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .build();
@@ -62,11 +94,17 @@ public class PeerNodeService {
     public synchronized PeerSummary registerPeer(String peerId, String baseUrl) {
         validatePeerId(peerId);
         String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-        peers.putIfAbsent(peerId, new PeerNode(
+        PeerNode peer = new PeerNode(
                 peerId,
                 normalizedBaseUrl,
                 normalizedBaseUrl == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
-        ));
+        );
+        if (normalizedBaseUrl == null) {
+            peer.recordHandshake(new NodeInfo(peerId, appVersion(), localCapabilities, peer.simulatedChain().size(), cumulativeDifficulty(peer.simulatedChain())));
+        } else {
+            handshake(peer);
+        }
+        peers.putIfAbsent(peerId, peer);
         savePeers();
         return toSummary(peerId);
     }
@@ -182,12 +220,82 @@ public class PeerNodeService {
         return broadcastJson("/api/blocks/broadcast", gson.toJson(block));
     }
 
+    public synchronized NodeInfo getNodeInfo() {
+        return new NodeInfo(
+                nodeId,
+                appVersion(),
+                localCapabilities,
+                blockchainService.getBlocks().size(),
+                blockchainService.getCumulativeDifficulty()
+        );
+    }
+
+    public synchronized Transaction acceptBroadcastTransaction(String body, String gossipId) {
+        validatePeerMessage(body, gossipId);
+        try {
+            Transaction transaction = gson.fromJson(body, Transaction.class);
+            if (transaction == null) {
+                throw new IllegalArgumentException("Malformed peer message");
+            }
+            Transaction acceptedTransaction = blockchainService.addPendingTransaction(transaction);
+            broadcastJson("/api/transactions/broadcast", body, gossipIdOrNew(gossipId));
+            return acceptedTransaction;
+        } catch (JsonSyntaxException exception) {
+            throw new IllegalArgumentException("Malformed peer message", exception);
+        }
+    }
+
+    public synchronized boolean acceptBroadcastBlock(String body, String gossipId) {
+        validatePeerMessage(body, gossipId);
+        try {
+            Block block = gson.fromJson(body, Block.class);
+            if (block == null) {
+                throw new IllegalArgumentException("Malformed peer message");
+            }
+            if (block.getIndex() < blockchainService.getBlocks().size()
+                    || isCommittedBlock(block.getHash())) {
+                return false;
+            }
+            boolean accepted = blockchainService.acceptBroadcastBlock(block);
+            if (accepted) {
+                broadcastJson("/api/blocks/broadcast", body, gossipIdOrNew(gossipId));
+            }
+            return accepted;
+        } catch (JsonSyntaxException exception) {
+            throw new IllegalArgumentException("Malformed peer message", exception);
+        }
+    }
+
     public synchronized void resetPeers() {
         peers.clear();
         savePeers();
     }
 
+    @Scheduled(fixedDelayString = "${blockchain.peer.scheduled-sync.interval-ms:30000}")
+    public void scheduledPeerRefreshAndSync() {
+        if (!scheduledSyncEnabled) {
+            return;
+        }
+
+        List<String> peerIds;
+        synchronized (this) {
+            peerIds = List.copyOf(peers.keySet());
+        }
+        for (String peerId : peerIds) {
+            try {
+                checkHealth(peerId);
+                syncFromPeer(peerId);
+            } catch (IllegalArgumentException exception) {
+                LOGGER.debug("Scheduled peer refresh skipped peerId={}", peerId, exception);
+            }
+        }
+    }
+
     private BroadcastResult broadcastJson(String path, String body) {
+        return broadcastJson(path, body, UUID.randomUUID().toString());
+    }
+
+    private BroadcastResult broadcastJson(String path, String body, String gossipId) {
         int peerCount = 0;
         int successCount = 0;
         for (PeerNode peer : peers.values()) {
@@ -196,13 +304,19 @@ public class PeerNodeService {
             }
             peerCount++;
             try {
-                postJson(peer.baseUrl() + path, body);
+                postJson(peer.baseUrl() + path, body, gossipId);
                 successCount++;
+                recordSuccess(peer);
             } catch (IllegalArgumentException exception) {
+                recordFailure(peer);
                 LOGGER.warn("Could not broadcast {} to peer {}", path, peer.peerId(), exception);
             }
         }
         return new BroadcastResult(peerCount, successCount, peerCount - successCount);
+    }
+
+    private String gossipIdOrNew(String gossipId) {
+        return gossipId == null || gossipId.isBlank() ? UUID.randomUUID().toString() : gossipId;
     }
 
     private PeerSummary toSummary(String peerId) {
@@ -223,7 +337,19 @@ public class PeerNodeService {
                     LOGGER.warn("Could not parse peer health status for {}", peer.peerId(), exception);
                 }
             }
-            return new PeerSummary(peer.peerId(), chainSize, valid, peer.baseUrl(), health.healthy(), "http");
+            return new PeerSummary(
+                    peer.peerId(),
+                    chainSize,
+                    valid,
+                    peer.baseUrl(),
+                    health.healthy(),
+                    "http",
+                    peer.nodeId(),
+                    peer.capabilities(),
+                    peer.score(),
+                    peer.failureCount(),
+                    peer.lastSeenAtText()
+            );
         }
 
         List<Block> chain = peer.simulatedChain();
@@ -238,7 +364,12 @@ public class PeerNodeService {
                 ),
                 null,
                 true,
-                "simulated"
+                "simulated",
+                peer.nodeId(),
+                peer.capabilities(),
+                peer.score(),
+                peer.failureCount(),
+                peer.lastSeenAtText()
         );
     }
 
@@ -249,9 +380,13 @@ public class PeerNodeService {
 
         try {
             String response = getString(peer.baseUrl() + "/api/chain/status");
+            recordSuccess(peer);
             return new PeerHealth(peer.peerId(), peer.baseUrl(), true, response);
         } catch (IllegalArgumentException exception) {
-            return new PeerHealth(peer.peerId(), peer.baseUrl(), false, exception.getMessage());
+            recordFailure(peer);
+            PeerHealth health = new PeerHealth(peer.peerId(), peer.baseUrl(), false, exception.getMessage());
+            evictIfUnhealthy(peer);
+            return health;
         }
     }
 
@@ -272,13 +407,22 @@ public class PeerNodeService {
         return sendWithRetry(request);
     }
 
-    private String postJson(String url, String body) {
+    private String postJson(String url, String body, String gossipId) {
+        if (body != null && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxMessageBytes) {
+            throw new IllegalArgumentException("Peer message exceeds " + maxMessageBytes + " bytes");
+        }
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(timeout)
+                .header("X-Node-Id", nodeId)
+                .header("X-Gossip-Id", gossipId)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return sendWithRetry(request);
+    }
+
+    private String postJson(String url, String body) {
+        return postJson(url, body, UUID.randomUUID().toString());
     }
 
     private String sendWithRetry(HttpRequest request) {
@@ -295,6 +439,61 @@ public class PeerNodeService {
             }
         }
         throw new IllegalArgumentException("Peer request failed: " + lastException.getMessage(), lastException);
+    }
+
+    private void handshake(PeerNode peer) {
+        try {
+            String response = getString(peer.baseUrl() + "/api/node/info");
+            NodeInfo nodeInfo = gson.fromJson(response, NodeInfo.class);
+            if (nodeInfo == null || nodeInfo.nodeId() == null || nodeInfo.nodeId().isBlank()) {
+                throw new IllegalArgumentException("Peer node info is invalid");
+            }
+            peer.recordHandshake(nodeInfo);
+            recordSuccess(peer);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Peer handshake failed peerId={}", peer.peerId(), exception);
+            recordFailure(peer);
+        }
+    }
+
+    private void validatePeerMessage(String body, String gossipId) {
+        if (body == null || body.isBlank()) {
+            throw new IllegalArgumentException("Malformed peer message");
+        }
+        if (body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxMessageBytes) {
+            throw new PeerMessageTooLargeException("Peer message exceeds " + maxMessageBytes + " bytes");
+        }
+        if (gossipId != null && !gossipId.isBlank() && !seenGossipIds.add(gossipId)) {
+            throw new DuplicatePeerMessageException("Duplicate peer gossip message");
+        }
+    }
+
+    private boolean isCommittedBlock(String hash) {
+        return blockchainService.getBlocks()
+                .stream()
+                .anyMatch(block -> block.getHash().equals(hash));
+    }
+
+    private void recordSuccess(PeerNode peer) {
+        peer.recordSuccess();
+    }
+
+    private void recordFailure(PeerNode peer) {
+        peer.recordFailure();
+    }
+
+    private void evictIfUnhealthy(PeerNode peer) {
+        if (peer.score() <= evictionScore) {
+            peers.remove(peer.peerId());
+            savePeers();
+            LOGGER.warn("Evicted unhealthy peer peerId={} score={}", peer.peerId(), peer.score());
+        }
+    }
+
+    private String appVersion() {
+        Package packageInfo = PeerNodeService.class.getPackage();
+        String version = packageInfo == null ? null : packageInfo.getImplementationVersion();
+        return version == null || version.isBlank() ? "0.0.1" : version;
     }
 
     private PeerNode getPeer(String peerId) {
@@ -341,11 +540,17 @@ public class PeerNodeService {
     private void loadPersistedPeers() {
         chainPersistenceService.loadPeers()
                 .orElse(List.of())
-                .forEach(peer -> peers.put(peer.peerId(), new PeerNode(
-                        peer.peerId(),
-                        peer.baseUrl(),
-                        peer.baseUrl() == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
-                )));
+                .forEach(peer -> {
+                    PeerNode node = new PeerNode(
+                            peer.peerId(),
+                            peer.baseUrl(),
+                            peer.baseUrl() == null ? new ArrayList<>(blockchainService.getBlocks()) : new ArrayList<>()
+                    );
+                    if (peer.baseUrl() == null) {
+                        node.recordHandshake(new NodeInfo(peer.peerId(), appVersion(), localCapabilities, node.simulatedChain().size(), cumulativeDifficulty(node.simulatedChain())));
+                    }
+                    peers.put(peer.peerId(), node);
+                });
     }
 
     private void savePeers() {
@@ -356,9 +561,85 @@ public class PeerNodeService {
         chainPersistenceService.savePeers(persistedPeers);
     }
 
-    private record PeerNode(String peerId, String baseUrl, List<Block> simulatedChain) {
+    public static class PeerMessageTooLargeException extends IllegalArgumentException {
+        public PeerMessageTooLargeException(String message) {
+            super(message);
+        }
+    }
+
+    public static class DuplicatePeerMessageException extends IllegalArgumentException {
+        public DuplicatePeerMessageException(String message) {
+            super(message);
+        }
+    }
+
+    private static final class PeerNode {
+        private final String peerId;
+        private final String baseUrl;
+        private final List<Block> simulatedChain;
+        private String nodeId;
+        private List<String> capabilities = List.of();
+        private int score;
+        private int failureCount;
+        private Instant lastSeenAt;
+
+        private PeerNode(String peerId, String baseUrl, List<Block> simulatedChain) {
+            this.peerId = peerId;
+            this.baseUrl = baseUrl;
+            this.simulatedChain = simulatedChain;
+            this.nodeId = peerId;
+        }
+
         boolean isHttp() {
             return baseUrl != null;
+        }
+
+        void recordHandshake(NodeInfo nodeInfo) {
+            this.nodeId = nodeInfo.nodeId();
+            this.capabilities = List.copyOf(nodeInfo.capabilities() == null ? List.of() : nodeInfo.capabilities());
+            this.lastSeenAt = Instant.now();
+        }
+
+        void recordSuccess() {
+            score++;
+            lastSeenAt = Instant.now();
+        }
+
+        void recordFailure() {
+            score--;
+            failureCount++;
+        }
+
+        String peerId() {
+            return peerId;
+        }
+
+        String baseUrl() {
+            return baseUrl;
+        }
+
+        List<Block> simulatedChain() {
+            return simulatedChain;
+        }
+
+        String nodeId() {
+            return nodeId;
+        }
+
+        List<String> capabilities() {
+            return List.copyOf(capabilities);
+        }
+
+        int score() {
+            return score;
+        }
+
+        int failureCount() {
+            return failureCount;
+        }
+
+        String lastSeenAtText() {
+            return lastSeenAt == null ? null : lastSeenAt.toString();
         }
     }
 }

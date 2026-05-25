@@ -1,6 +1,5 @@
 package com.kna.backend.controller;
 
-import com.google.gson.Gson;
 import com.kna.backend.dto.AddBlockRequest;
 import com.kna.backend.dto.ApiMessage;
 import com.kna.backend.dto.BlockReference;
@@ -11,6 +10,7 @@ import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
 import com.kna.backend.dto.MinePeerBlockRequest;
 import com.kna.backend.dto.MineTransactionsRequest;
+import com.kna.backend.dto.NodeInfo;
 import com.kna.backend.dto.OperationHealth;
 import com.kna.backend.dto.OperationMetrics;
 import com.kna.backend.dto.PeerDiscoveryRequest;
@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,7 +45,6 @@ import java.util.List;
 @RequestMapping("/api")
 public class BlockchainController {
 
-    private final Gson gson = new Gson();
     private final BlockchainService blockchainService;
     private final PeerNodeService peerNodeService;
 
@@ -80,13 +80,24 @@ public class BlockchainController {
     }
 
     @PostMapping("/blocks/broadcast")
-    public BroadcastBlockResult acceptBroadcastBlock(@RequestBody String body) {
+    public BroadcastBlockResult acceptBroadcastBlock(
+            @RequestBody String body,
+            @RequestHeader(value = "X-Gossip-Id", required = false) String gossipId
+    ) {
         try {
-            Block block = gson.fromJson(body, Block.class);
-            return new BroadcastBlockResult(blockchainService.acceptBroadcastBlock(block));
+            return new BroadcastBlockResult(peerNodeService.acceptBroadcastBlock(body, gossipId));
+        } catch (PeerNodeService.PeerMessageTooLargeException exception) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, exception.getMessage(), exception);
+        } catch (PeerNodeService.DuplicatePeerMessageException exception) {
+            return new BroadcastBlockResult(false);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
+    }
+
+    @GetMapping("/node/info")
+    public NodeInfo getNodeInfo() {
+        return peerNodeService.getNodeInfo();
     }
 
     @GetMapping("/wallets/new")
@@ -127,10 +138,16 @@ public class BlockchainController {
     }
 
     @PostMapping("/transactions/broadcast")
-    public Transaction acceptBroadcastTransaction(@RequestBody String body) {
+    public Transaction acceptBroadcastTransaction(
+            @RequestBody String body,
+            @RequestHeader(value = "X-Gossip-Id", required = false) String gossipId
+    ) {
         try {
-            Transaction transaction = gson.fromJson(body, Transaction.class);
-            return blockchainService.addPendingTransaction(transaction);
+            return peerNodeService.acceptBroadcastTransaction(body, gossipId);
+        } catch (PeerNodeService.PeerMessageTooLargeException exception) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, exception.getMessage(), exception);
+        } catch (PeerNodeService.DuplicatePeerMessageException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, exception.getMessage(), exception);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
         }
