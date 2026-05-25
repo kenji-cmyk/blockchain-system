@@ -15,6 +15,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Peer sync: simulated peers run inside the same application, and HTTP peers can point to other running backend instances for multi-instance demos.
 - Peer networking: HTTP peers support node-info handshakes, capability metadata, health checks, discovery by URL, removal, scoring, automatic unhealthy-peer eviction, transaction gossip, block gossip, and configurable timeout/retry handling.
 - Error handling: API errors return a unified JSON format.
+- Security: operator routes require bearer-token credentials when security is enabled, and expensive endpoints are rate limited.
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
 - Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
@@ -28,6 +29,11 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Default peer eviction score: `blockchain.peer.eviction-score=-3`.
 - Default peer message size limit: `blockchain.peer.max-message-bytes=65536`.
 - Scheduled peer sync is disabled by default with `blockchain.peer.scheduled-sync.enabled=false`.
+- Security is enabled by default with `blockchain.security.enabled=true`.
+- Default operator token: `blockchain.security.operator-token=operator-token`.
+- Default read-only token: `blockchain.security.read-only-token=read-only-token`.
+- Default API request size limit: `blockchain.security.max-request-bytes=65536`.
+- Default expensive endpoint rate limit: `blockchain.rate-limit.expensive-limit=20` per `blockchain.rate-limit.window-ms=60000`.
 
 ## Running the Project
 
@@ -70,6 +76,16 @@ docker compose up --build
 The Docker Compose setup enables H2 database persistence and stores data in a Docker volume.
 
 ## API
+
+### Authentication
+
+When `blockchain.security.enabled=true`, operator routes require:
+
+```http
+Authorization: Bearer OPERATOR_TOKEN
+```
+
+The operator token can change difficulty, reset or tamper with the chain, mine demo/pending blocks, and manage peers. The read-only token is accepted as an identity for read-only use but cannot perform operator actions. The test profile disables security by default so older learning tests can set up state directly; Phase 8 tests enable security explicitly.
 
 ### View the Entire Chain
 
@@ -130,6 +146,7 @@ This mines pending transactions into a new block and adds a mining reward transa
 
 ```http
 POST /api/transactions/mine
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -164,6 +181,7 @@ GET /api/chain/status
 
 ```http
 PUT /api/chain/difficulty
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -179,6 +197,7 @@ This endpoint intentionally changes a block marker without re-mining it. After c
 
 ```http
 POST /api/chain/tamper
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -193,6 +212,7 @@ This clears the chain and pending transaction pool, then creates a new genesis b
 
 ```http
 POST /api/chain/reset
+Authorization: Bearer OPERATOR_TOKEN
 ```
 
 ### Operations Health
@@ -255,6 +275,7 @@ Without `baseUrl`, this creates a simulated peer inside the same application and
 
 ```http
 POST /api/peers
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -266,6 +287,7 @@ With `baseUrl`, this registers an HTTP peer that points to another running backe
 
 ```http
 POST /api/peers
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -300,6 +322,7 @@ This registers HTTP peers from base URLs. Peer IDs are derived from the URL host
 
 ```http
 POST /api/peers/discover
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -322,6 +345,7 @@ For HTTP peers, health calls the peer's `GET /api/chain/status` endpoint with th
 
 ```http
 DELETE /api/peers/{peerId}
+Authorization: Bearer OPERATOR_TOKEN
 ```
 
 ### Fetch a Peer Chain
@@ -336,6 +360,7 @@ This mines a reward-only block on the selected simulated peer. It is useful for 
 
 ```http
 POST /api/peers/{peerId}/blocks
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -349,6 +374,7 @@ This compares the local chain with the selected peer chain. The local chain is r
 
 ```http
 POST /api/peers/{peerId}/sync
+Authorization: Bearer OPERATOR_TOKEN
 ```
 
 Example response:
@@ -369,6 +395,7 @@ Example response:
 
 ```http
 POST /api/peers/broadcast/transactions
+Authorization: Bearer OPERATOR_TOKEN
 ```
 
 This sends every local pending transaction to registered HTTP peers through `POST /api/transactions/broadcast`. Outbound peer messages include `X-Node-Id` and `X-Gossip-Id` headers so peers can deduplicate and relay messages safely.
@@ -397,6 +424,7 @@ This endpoint is kept for the basic learning flow from section A. It mines a new
 
 ```http
 POST /api/blocks
+Authorization: Bearer OPERATOR_TOKEN
 Content-Type: application/json
 
 {
@@ -471,6 +499,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/ApiExceptionHandler.java`: unified API error responses.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
+- `config/ApiSecurityFilter.java`: bearer-token operator/read-only checks and request-size enforcement.
+- `config/RateLimitingFilter.java`: per-client rate limiting for expensive mining and broadcast endpoints.
 - `resources/static/`: built React/Tailwind client assets generated from the root `frontend/` project.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
@@ -481,6 +511,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `DatabasePersistenceTests.java`: database-mode persistence tests for normalized tables.
 - `LedgerValidationTests.java`: ledger-level tests for UTXO dependencies, double-spend rejection, and invalid output canonicalization.
 - `PeerNetworkPhase7Tests.java`: peer-network tests for node info, handshake metadata, gossip headers, unhealthy-peer eviction, and hostile peer payload rejection.
+- `SecurityPhase8Tests.java`: authentication, role enforcement, malformed-key, replay, hostile payload, and full secured system smoke tests.
+- `RateLimitPhase8Tests.java`: rate-limit tests for expensive endpoints.
 
 ## Roadmap
 
@@ -575,11 +607,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ### Phase 8: Security and Admin Controls
 
-- [ ] Protect reset, tamper, difficulty, and peer-management endpoints with authentication.
-- [ ] Add role-based access for read-only and operator actions.
-- [ ] Add rate limiting for expensive or state-changing APIs.
-- [ ] Add stricter request size limits and validation at system boundaries.
-- [ ] Add security tests for malformed keys, replayed transactions, and hostile peer payloads.
+- [x] Protect reset, tamper, difficulty, and peer-management endpoints with authentication.
+- [x] Add role-based access for read-only and operator actions.
+- [x] Add rate limiting for expensive or state-changing APIs.
+- [x] Add stricter request size limits and validation at system boundaries.
+- [x] Add security tests for malformed keys, replayed transactions, and hostile peer payloads.
 
 ### Phase 9: Frontend Productization
 

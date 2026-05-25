@@ -42,6 +42,8 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Provides local, test, and docker application profiles.
 - Exposes operations health and metrics APIs.
 - Adds request tracing with `X-Request-Id`.
+- Protects operator routes with bearer-token roles and rate-limits expensive mining/broadcast APIs.
+- Enforces request-size limits and rejects malformed, replayed, or oversized peer payloads.
 - Serves a responsive luminous dark React/Tailwind web UI for chain browsing, wallets, transactions, mining, and peer sync demos.
 - Organizes the frontend into layout, UI, blockchain, wallet, peer, view, hook, and API helper modules.
 - Includes CI workflow for frontend build, backend tests, and Docker image build.
@@ -220,18 +222,11 @@ Completed:
 - Phase 5: responsive React/Tailwind web client for chain browsing, wallet creation, balance lookup, transaction submission, pending transaction mining, difficulty controls, fork/orphan visibility, and peer conflict resolution demos, frontend source split into focused components, views, hooks, API helpers, and formatting utilities, API tests for all current endpoints.
 - Phase 6: UTXO ledger replay, coin selection, change outputs, spent-output validation, same-block transaction dependency validation, stronger transaction canonicalization, and ledger-level hardening tests.
 - Phase 7: node identity and capability handshakes, peer scoring and unhealthy-peer eviction, optional scheduled sync, gossip headers and relay, and peer message safeguards for duplicate, stale, malformed, and oversized payloads.
+- Phase 8: bearer-token operator/read-only roles, protected admin and peer-management routes, rate limiting for expensive endpoints, request-size boundaries, and security/system smoke tests.
 
 ## Future Plan
 
 The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
-
-### Phase 8: Security and Admin Controls
-
-- Add authenticated admin routes for reset, tamper, difficulty changes, and peer management.
-- Add role-based access for read-only versus operator actions.
-- Add rate limiting for expensive endpoints such as mining and broadcast.
-- Add stricter request size limits and validation at API boundaries.
-- Add security-focused tests for invalid keys, replayed transactions, and malformed peer payloads.
 
 ### Phase 9: Frontend Productization
 
