@@ -46,9 +46,11 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Enforces request-size limits and rejects malformed, replayed, or oversized peer payloads.
 - Serves a responsive luminous dark React/Tailwind web UI with route-based navigation, deep links, and detail pages for blocks, transactions, wallets, and peers.
 - Provides consistent loading, empty, error, and retry states for API-backed frontend panels.
+- Exposes richer operational metrics for validation, mining, broadcast, peer sync, and rejected peer/user payloads.
+- Emits structured event logs for mining, resets, peer sync, broadcasts, rejected blocks, and rejected transactions.
 - Organizes the frontend into layout, UI, blockchain, wallet, peer, view, hook, and API helper modules.
 - Includes CI workflow for frontend build, frontend smoke tests, backend tests, and Docker image build.
-- Includes Docker and Docker Compose setup.
+- Includes Docker and Docker Compose setup with a multi-node demo profile.
 - Includes MockMvc tests for all current APIs.
 
 ## Project Structure
@@ -161,6 +163,14 @@ Run with Docker Compose from the repository root:
 docker compose up --build
 ```
 
+Run a three-node demo from the repository root:
+
+```bash
+docker compose --profile multinode up --build
+```
+
+The default node is available at `http://localhost:8080`; extra demo nodes are published at `http://localhost:8081` and `http://localhost:8082`.
+
 ## Main APIs
 
 Important endpoints:
@@ -225,18 +235,11 @@ Completed:
 - Phase 7: node identity and capability handshakes, peer scoring and unhealthy-peer eviction, optional scheduled sync, gossip headers and relay, and peer message safeguards for duplicate, stale, malformed, and oversized payloads.
 - Phase 8: bearer-token operator/read-only roles, protected admin and peer-management routes, rate limiting for expensive endpoints, request-size boundaries, and security/system smoke tests.
 - Phase 9: route-based frontend navigation, deep links, block/transaction/wallet/peer detail pages, consistent API loading/error/empty/retry states, frontend smoke tests, and CI frontend verification.
+- Phase 10: richer operational metrics, structured event logs, multi-node Docker Compose demo profiles, frontend-first release image packaging, and production-style configuration/runbook notes.
 
 ## Future Plan
 
-The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
-
-### Phase 10: Observability and Release Readiness
-
-- Add actuator-style operational endpoints or richer internal metrics.
-- Add structured event logs for mining, peer sync, broadcasts, rejected blocks, and rejected transactions.
-- Add Docker Compose profiles for multi-node demos.
-- Add release packaging that builds frontend assets before backend packaging.
-- Add production-style configuration documentation and runbooks.
+The roadmap through Phase 10 is complete. Future work should focus on optional extensions such as stronger consensus research, richer browser automation, or replacing demo credentials with a real identity provider.
 
 ## Notes
 

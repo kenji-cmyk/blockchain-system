@@ -560,7 +560,65 @@ class BackendApplicationTests {
                 .andExpect(jsonPath("$.chainSize").value(1))
                 .andExpect(jsonPath("$.pendingTransactions").value(0))
                 .andExpect(jsonPath("$.cumulativeDifficulty").value(cumulativeDifficulty))
-                .andExpect(jsonPath("$.peers").value(0));
+                .andExpect(jsonPath("$.peers").value(0))
+                .andExpect(jsonPath("$.minedBlocks").value(0))
+                .andExpect(jsonPath("$.minedTransactions").value(0))
+                .andExpect(jsonPath("$.rejectedTransactions").value(0))
+                .andExpect(jsonPath("$.acceptedBroadcastBlocks").value(0))
+                .andExpect(jsonPath("$.rejectedBroadcastBlocks").value(0))
+                .andExpect(jsonPath("$.peerSyncAttempts").value(0))
+                .andExpect(jsonPath("$.transactionBroadcastAttempts").value(0))
+                .andExpect(jsonPath("$.blockBroadcastAttempts").value(0));
+    }
+
+    @Test
+    void operationsMetricsTrackMiningRejectionsBroadcastsAndPeerSync() throws Exception {
+        JsonObject senderWallet = createWallet();
+        JsonObject receiverWallet = createWallet();
+        JsonObject minerWallet = createWallet();
+        fundWallet(senderWallet);
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(senderWallet, receiverWallet, 2, 0.25)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transactionJson(receiverWallet, senderWallet, 99)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/transactions/mine")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mineJson(minerWallet)))
+                .andExpect(status().isCreated());
+
+        Block orphanBlock = new Block(99, List.of(Transaction.miningReward("orphan-miner", 10)), "missing-parent");
+        orphanBlock.mineBlock(2);
+        mockMvc.perform(post("/api/blocks/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(gson.toJson(orphanBlock)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(false));
+
+        registerPeer("node-b");
+        mockMvc.perform(post("/api/peers/node-b/sync"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/ops/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.minedBlocks").value(2))
+                .andExpect(jsonPath("$.minedTransactions").value(3))
+                .andExpect(jsonPath("$.miningNonceTotal").isNumber())
+                .andExpect(jsonPath("$.miningElapsedMsTotal").isNumber())
+                .andExpect(jsonPath("$.rejectedTransactions").value(1))
+                .andExpect(jsonPath("$.acceptedBroadcastBlocks").value(0))
+                .andExpect(jsonPath("$.rejectedBroadcastBlocks").value(1))
+                .andExpect(jsonPath("$.peerSyncAttempts").value(1))
+                .andExpect(jsonPath("$.peerSyncSuccesses").value(1))
+                .andExpect(jsonPath("$.peerSyncAdoptions").value(0))
+                .andExpect(jsonPath("$.blockBroadcastAttempts").value(0))
+                .andExpect(jsonPath("$.transactionBroadcastAttempts").value(0));
     }
 
     @Test

@@ -47,4 +47,5 @@ jobs:
         run: mvn test
 
       - name: Build Docker image
-        run: docker build -t blockchain-system-backend:ci .
+        working-directory: .
+        run: docker build -f backend/Dockerfile -t blockchain-system-backend:ci .

@@ -24,6 +24,7 @@ import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.service.BlockchainService;
+import com.kna.backend.service.OperationalMetricsService;
 import com.kna.backend.service.PeerNodeService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -47,10 +48,16 @@ public class BlockchainController {
 
     private final BlockchainService blockchainService;
     private final PeerNodeService peerNodeService;
+    private final OperationalMetricsService operationalMetricsService;
 
-    public BlockchainController(BlockchainService blockchainService, PeerNodeService peerNodeService) {
+    public BlockchainController(
+            BlockchainService blockchainService,
+            PeerNodeService peerNodeService,
+            OperationalMetricsService operationalMetricsService
+    ) {
         this.blockchainService = blockchainService;
         this.peerNodeService = peerNodeService;
+        this.operationalMetricsService = operationalMetricsService;
     }
 
     @GetMapping("/blocks")
@@ -293,13 +300,31 @@ public class BlockchainController {
 
     @GetMapping("/ops/metrics")
     public OperationMetrics getMetrics() {
+        OperationalMetricsService.Snapshot snapshot = operationalMetricsService.snapshot();
         return new OperationMetrics(
                 blockchainService.getBlocks().size(),
                 blockchainService.getPendingTransactions().size(),
                 blockchainService.getCumulativeDifficulty(),
                 blockchainService.getForkBlocks().size(),
                 blockchainService.getOrphanBlocks().size(),
-                peerNodeService.getPeerCount()
+                peerNodeService.getPeerCount(),
+                snapshot.validationRuns(),
+                snapshot.minedBlocks(),
+                snapshot.minedTransactions(),
+                snapshot.miningNonceTotal(),
+                snapshot.miningElapsedMsTotal(),
+                snapshot.rejectedTransactions(),
+                snapshot.acceptedBroadcastBlocks(),
+                snapshot.rejectedBroadcastBlocks(),
+                snapshot.peerSyncAttempts(),
+                snapshot.peerSyncSuccesses(),
+                snapshot.peerSyncAdoptions(),
+                snapshot.transactionBroadcastAttempts(),
+                snapshot.transactionBroadcastSuccesses(),
+                snapshot.transactionBroadcastFailures(),
+                snapshot.blockBroadcastAttempts(),
+                snapshot.blockBroadcastSuccesses(),
+                snapshot.blockBroadcastFailures()
         );
     }
 

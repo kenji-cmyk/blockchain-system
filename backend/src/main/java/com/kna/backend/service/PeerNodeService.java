@@ -44,6 +44,7 @@ public class PeerNodeService {
 
     private final BlockchainService blockchainService;
     private final ChainPersistenceService chainPersistenceService;
+    private final OperationalMetricsService operationalMetricsService;
     private final Map<String, PeerNode> peers = new LinkedHashMap<>();
     private final Gson gson = new Gson();
     private final HttpClient httpClient;
@@ -68,6 +69,7 @@ public class PeerNodeService {
     public PeerNodeService(
             BlockchainService blockchainService,
             ChainPersistenceService chainPersistenceService,
+            OperationalMetricsService operationalMetricsService,
             @Value("${blockchain.peer.timeout-ms:1500}") long timeoutMs,
             @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts,
             @Value("${blockchain.node.id:}") String configuredNodeId,
@@ -77,6 +79,7 @@ public class PeerNodeService {
     ) {
         this.blockchainService = blockchainService;
         this.chainPersistenceService = chainPersistenceService;
+        this.operationalMetricsService = operationalMetricsService;
         this.timeout = Duration.ofMillis(timeoutMs);
         this.retryAttempts = Math.max(1, retryAttempts);
         this.nodeId = configuredNodeId == null || configuredNodeId.isBlank()
@@ -209,6 +212,16 @@ public class PeerNodeService {
             message = "Peer chain was not adopted";
         }
 
+        operationalMetricsService.recordPeerSync(peerValid, adopted);
+        LOGGER.info(
+                "event=peer_sync peerId={} peerChainSize={} localSizeBefore={} localSizeAfter={} peerValid={} adopted={}",
+                peerId,
+                peerChain.size(),
+                localSizeBefore,
+                localSizeAfter,
+                peerValid,
+                adopted
+        );
         return new SyncResult(peerId, peerChain.size(), localSizeBefore, localSizeAfter, peerValid, adopted, message);
     }
 
@@ -254,6 +267,8 @@ public class PeerNodeService {
             }
             if (block.getIndex() < blockchainService.getBlocks().size()
                     || isCommittedBlock(block.getHash())) {
+                operationalMetricsService.recordBroadcastBlockRejected();
+                LOGGER.warn("event=block_rejected source=peer reason=\"stale or duplicate\" index={} hash={}", block.getIndex(), block.getHash());
                 return false;
             }
             boolean accepted = blockchainService.acceptBroadcastBlock(block);
@@ -312,7 +327,16 @@ public class PeerNodeService {
                 LOGGER.warn("Could not broadcast {} to peer {}", path, peer.peerId(), exception);
             }
         }
-        return new BroadcastResult(peerCount, successCount, peerCount - successCount);
+        int failureCount = peerCount - successCount;
+        operationalMetricsService.recordBroadcast(path, peerCount, successCount, failureCount);
+        LOGGER.info(
+                "event=peer_broadcast path={} peerCount={} successCount={} failureCount={}",
+                path,
+                peerCount,
+                successCount,
+                failureCount
+        );
+        return new BroadcastResult(peerCount, successCount, failureCount);
     }
 
     private String gossipIdOrNew(String gossipId) {

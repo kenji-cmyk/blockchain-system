@@ -16,7 +16,8 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Peer networking: HTTP peers support node-info handshakes, capability metadata, health checks, discovery by URL, removal, scoring, automatic unhealthy-peer eviction, transaction gossip, block gossip, and configurable timeout/retry handling.
 - Error handling: API errors return a unified JSON format.
 - Security: operator routes require bearer-token credentials when security is enabled, and expensive endpoints are rate limited.
-- Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
+- Observability: structured event logs cover mining, resets, peer sync, broadcasts, rejected blocks, and rejected transactions.
+- Metrics: operations metrics include validation, mining, broadcast, peer sync, and rejection counters.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
 - Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
 - Client: Spring Boot serves built React/Tailwind assets for exploring the chain, wallets, transactions, mining, peer sync, and deep-linked detail pages.
@@ -74,6 +75,14 @@ docker compose up --build
 ```
 
 The Docker Compose setup enables H2 database persistence and stores data in a Docker volume.
+
+Run the multi-node demo profile from the repository root:
+
+```bash
+docker compose --profile multinode up --build
+```
+
+The default node runs on `http://localhost:8080`, with additional nodes on `http://localhost:8081` and `http://localhost:8082`.
 
 ## API
 
@@ -249,9 +258,28 @@ Example response:
   "cumulativeDifficulty": 4,
   "forkBlocks": 0,
   "orphanBlocks": 0,
-  "peers": 0
+  "peers": 0,
+  "validationRuns": 0,
+  "minedBlocks": 0,
+  "minedTransactions": 0,
+  "miningNonceTotal": 0,
+  "miningElapsedMsTotal": 0,
+  "rejectedTransactions": 0,
+  "acceptedBroadcastBlocks": 0,
+  "rejectedBroadcastBlocks": 0,
+  "peerSyncAttempts": 0,
+  "peerSyncSuccesses": 0,
+  "peerSyncAdoptions": 0,
+  "transactionBroadcastAttempts": 0,
+  "transactionBroadcastSuccesses": 0,
+  "transactionBroadcastFailures": 0,
+  "blockBroadcastAttempts": 0,
+  "blockBroadcastSuccesses": 0,
+  "blockBroadcastFailures": 0
 }
 ```
+
+The metrics window resets when the chain is reset. This keeps learning demos easy to inspect while still exposing the current node's mining, validation, broadcast, sync, and rejection activity.
 
 ### OpenAPI Document
 
@@ -475,6 +503,46 @@ spring.datasource.password=
 
 Database persistence writes normalized tables for blocks, transactions, wallets, peers, and pending transactions. A simple schema migration table records the current schema version. File persistence still stores only the chain JSON and is intended for lightweight local demos.
 
+## Operations Runbook
+
+### Release Packaging
+
+The Docker image is the release package. Build it from the repository root so the Dockerfile can run the frontend build before packaging the backend JAR:
+
+```bash
+docker build -f backend/Dockerfile -t blockchain-system-backend:local .
+```
+
+The image build runs `npm ci`, `npm run build`, and then `mvn -DskipTests package`; the resulting JAR contains the freshly built React assets under `backend/src/main/resources/static`.
+
+### Multi-Node Demo
+
+Start the demo profile:
+
+```bash
+docker compose --profile multinode up --build
+```
+
+Register peer nodes from the default node:
+
+```bash
+curl -X POST http://localhost:8080/api/peers/discover \
+  -H "Authorization: Bearer operator-token" \
+  -H "Content-Type: application/json" \
+  -d "{\"peerUrls\":[\"http://node-b:8080\",\"http://node-c:8080\"]}"
+```
+
+Use `GET /api/node/info`, `GET /api/peers`, `GET /api/ops/health`, and `GET /api/ops/metrics` on each published port to inspect identity, peer health, and operational counters.
+
+### Production-Style Configuration Checklist
+
+- Set `BLOCKCHAIN_SECURITY_OPERATOR_TOKEN` and `BLOCKCHAIN_SECURITY_READ_ONLY_TOKEN` to non-default secrets before exposing the API.
+- Keep `BLOCKCHAIN_SECURITY_ENABLED=true` and `BLOCKCHAIN_RATE_LIMIT_ENABLED=true` outside local test profiles.
+- Set a stable `BLOCKCHAIN_NODE_ID` for every deployed node.
+- Use database persistence with a durable volume through `SPRING_DATASOURCE_URL`.
+- Tune `BLOCKCHAIN_PEER_TIMEOUT_MS`, `BLOCKCHAIN_PEER_RETRY_ATTEMPTS`, and `BLOCKCHAIN_PEER_EVICTION_SCORE` for the network being demonstrated.
+- Review structured logs for `event=transaction_rejected`, `event=block_rejected`, and `event=peer_broadcast` when diagnosing sync or propagation issues.
+
 ## Application Profiles
 
 - `local`: local development defaults with persistence disabled.
@@ -495,6 +563,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `entity/Wallet.java`: public/private key pair response model.
 - `service/BlockchainService.java`: in-memory chain, pending transaction pool, UTXO coin selection, balances, fees, block mining, validation, difficulty, and reset logic.
 - `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
+- `service/OperationalMetricsService.java`: resettable counters for validation, mining, broadcast, peer sync, and rejected payload activity.
 - `service/PeerNodeService.java`: simulated peers, HTTP peers, node-info handshakes, capability metadata, scoring, eviction, scheduled sync, gossip broadcasts, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/ApiExceptionHandler.java`: unified API error responses.
@@ -624,11 +693,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ### Phase 10: Observability and Release Readiness
 
-- [ ] Add richer metrics for mining, validation, peer sync, and broadcasts.
-- [ ] Add structured event logs for rejected blocks and rejected transactions.
-- [ ] Add multi-node Docker Compose demo profiles.
-- [ ] Package backend releases only after frontend assets are built.
-- [ ] Add production-style configuration notes and runbooks.
+- [x] Add richer metrics for mining, validation, peer sync, and broadcasts.
+- [x] Add structured event logs for rejected blocks and rejected transactions.
+- [x] Add multi-node Docker Compose demo profiles.
+- [x] Package backend releases only after frontend assets are built.
+- [x] Add production-style configuration notes and runbooks.
 
 ### Section D: Code Quality and Observability
 

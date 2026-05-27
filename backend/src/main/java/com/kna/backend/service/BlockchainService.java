@@ -32,6 +32,7 @@ public class BlockchainService {
     private final List<Block> forkBlocks = new ArrayList<>();
     private final List<Block> orphanBlocks = new ArrayList<>();
     private final ChainPersistenceService chainPersistenceService;
+    private final OperationalMetricsService operationalMetricsService;
     private int difficulty;
     private final double miningReward;
     private final int maxTransactionsPerBlock;
@@ -40,7 +41,8 @@ public class BlockchainService {
             @Value("${blockchain.difficulty:3}") int difficulty,
             @Value("${blockchain.mining-reward:10}") double miningReward,
             @Value("${blockchain.max-transactions-per-block:5}") int maxTransactionsPerBlock,
-            ChainPersistenceService chainPersistenceService
+            ChainPersistenceService chainPersistenceService,
+            OperationalMetricsService operationalMetricsService
     ) {
         this.miningReward = miningReward;
         if (maxTransactionsPerBlock < 2) {
@@ -48,6 +50,7 @@ public class BlockchainService {
         }
         this.maxTransactionsPerBlock = maxTransactionsPerBlock;
         this.chainPersistenceService = chainPersistenceService;
+        this.operationalMetricsService = operationalMetricsService;
         setDifficulty(difficulty);
         loadOrReset();
     }
@@ -100,15 +103,22 @@ public class BlockchainService {
     }
 
     public synchronized Transaction createTransaction(String sender, String receiver, double amount, double fee, String privateKey) {
-        validateTransactionInput(sender, receiver, amount, fee, privateKey);
-
-        Transaction transaction = createUtxoTransaction(sender, receiver, amount, fee);
-        transaction.sign(privateKey);
-        return addPendingTransaction(transaction);
+        try {
+            validateTransactionInput(sender, receiver, amount, fee, privateKey);
+            Transaction transaction = createUtxoTransaction(sender, receiver, amount, fee);
+            transaction.sign(privateKey);
+            return addPendingTransaction(transaction);
+        } catch (IllegalArgumentException exception) {
+            operationalMetricsService.recordRejectedTransaction();
+            LOGGER.warn("event=transaction_rejected source=local reason=\"{}\"", exception.getMessage());
+            throw exception;
+        }
     }
 
     public synchronized Transaction addPendingTransaction(Transaction transaction) {
         if (!transaction.isValid()) {
+            operationalMetricsService.recordRejectedTransaction();
+            LOGGER.warn("event=transaction_rejected source=peer reason=\"Transaction signature is invalid\"");
             throw new IllegalArgumentException("Transaction signature is invalid");
         }
 
@@ -120,6 +130,8 @@ public class BlockchainService {
 
         Map<UtxoKey, UtxoEntry> pendingLedger = ledgerAfterPendingTransactions();
         if (!UtxoLedger.applyPendingTransaction(transaction, pendingLedger)) {
+            operationalMetricsService.recordRejectedTransaction();
+            LOGGER.warn("event=transaction_rejected source=peer transactionId={} reason=\"Sender balance is insufficient\"", transaction.getTransactionId());
             throw new IllegalArgumentException("Sender balance is insufficient");
         }
 
@@ -154,6 +166,7 @@ public class BlockchainService {
     }
 
     public synchronized boolean isValid() {
+        operationalMetricsService.recordValidation();
         return isChainValid(blockchain, difficulty, maxTransactionsPerBlock, miningReward);
     }
 
@@ -165,10 +178,14 @@ public class BlockchainService {
         Block previousBlock = blockchain.getLast();
         if (block.getIndex() != blockchain.size()) {
             rememberBlock(block);
+            operationalMetricsService.recordBroadcastBlockRejected();
+            LOGGER.warn("event=block_rejected source=peer reason=\"unexpected index\" index={} expectedIndex={} hash={}", block.getIndex(), blockchain.size(), block.getHash());
             return false;
         }
         if (!previousBlock.getHash().equals(block.getPreviousHash())) {
             rememberBlock(block);
+            operationalMetricsService.recordBroadcastBlockRejected();
+            LOGGER.warn("event=block_rejected source=peer reason=\"previous hash mismatch\" index={} hash={}", block.getIndex(), block.getHash());
             return false;
         }
 
@@ -176,6 +193,8 @@ public class BlockchainService {
         candidateChain.add(block);
         if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
             rememberBlock(block);
+            operationalMetricsService.recordBroadcastBlockRejected();
+            LOGGER.warn("event=block_rejected source=peer reason=\"candidate chain invalid\" index={} hash={}", block.getIndex(), block.getHash());
             return false;
         }
 
@@ -183,6 +202,8 @@ public class BlockchainService {
         removeMinedPendingTransactions(block);
         chainPersistenceService.savePendingTransactions(pendingTransactions);
         chainPersistenceService.saveChain(blockchain);
+        operationalMetricsService.recordBroadcastBlockAccepted();
+        LOGGER.info("event=block_accepted source=peer index={} hash={}", block.getIndex(), block.getHash());
         return true;
     }
 
@@ -201,6 +222,8 @@ public class BlockchainService {
         blockchain.add(genesisBlock);
         chainPersistenceService.saveChain(blockchain);
         chainPersistenceService.savePendingTransactions(pendingTransactions);
+        operationalMetricsService.resetWindow();
+        LOGGER.info("event=chain_reset chainSize={} pendingTransactions=0", blockchain.size());
     }
 
     public synchronized int getDifficulty() {
@@ -366,12 +389,14 @@ public class BlockchainService {
         block.mineBlock(difficulty);
         long elapsedMs = System.currentTimeMillis() - start;
         int nonceCount = block.getNonce() - nonceBefore;
+        operationalMetricsService.recordMinedBlock(block.getTransactions().size(), nonceCount, elapsedMs);
 
         LOGGER.info(
-                "Mined {} block index={} difficulty={} nonceCount={} elapsedMs={} hash={}",
+                "event=block_mined source={} index={} difficulty={} transactionCount={} nonceCount={} elapsedMs={} hash={}",
                 source,
                 block.getIndex(),
                 difficulty,
+                block.getTransactions().size(),
                 nonceCount,
                 elapsedMs,
                 block.getHash()
