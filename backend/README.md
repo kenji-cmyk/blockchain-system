@@ -19,7 +19,7 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Observability: mining logs include block source, index, difficulty, nonce count, elapsed time, and hash.
 - Operations: health and metrics APIs expose chain state, validity, persistence status, peer count, and cumulative difficulty.
 - Request tracing: every HTTP request gets an `X-Request-Id` response header and structured request log entry.
-- Client: Spring Boot serves built React/Tailwind assets for exploring the chain, wallets, transactions, mining, and peer sync.
+- Client: Spring Boot serves built React/Tailwind assets for exploring the chain, wallets, transactions, mining, peer sync, and deep-linked detail pages.
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
@@ -501,7 +501,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
 - `config/ApiSecurityFilter.java`: bearer-token operator/read-only checks and request-size enforcement.
 - `config/RateLimitingFilter.java`: per-client rate limiting for expensive mining and broadcast endpoints.
-- `resources/static/`: built React/Tailwind client assets generated from the root `frontend/` project.
+- `resources/static/`: built React/Tailwind client assets generated from the root `frontend/` project, including hash-route deep links for blocks, transactions, wallets, and peers.
 - `pkg/utils/StringUtil.java`: SHA-256 helper.
 - `pkg/utils/CryptoUtil.java`: RSA wallet generation, signing, and signature verification.
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
@@ -513,6 +513,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `PeerNetworkPhase7Tests.java`: peer-network tests for node info, handshake metadata, gossip headers, unhealthy-peer eviction, and hostile peer payload rejection.
 - `SecurityPhase8Tests.java`: authentication, role enforcement, malformed-key, replay, hostile payload, and full secured system smoke tests.
 - `RateLimitPhase8Tests.java`: rate-limit tests for expensive endpoints.
+- `frontend/tests/routes.test.mjs`: frontend smoke tests for navigation and deep-link route contracts.
 
 ## Roadmap
 
@@ -615,11 +616,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ### Phase 9: Frontend Productization
 
-- [ ] Add route-based navigation for blocks, transactions, wallets, and peers.
-- [ ] Add detail views for individual blocks, transactions, wallets, and peers.
-- [ ] Add consistent loading, empty, error, and retry states.
-- [ ] Add browser smoke tests for the main client workflows.
-- [ ] Add a frontend CI step for build and UI verification.
+- [x] Add route-based navigation for blocks, transactions, wallets, and peers.
+- [x] Add detail views for individual blocks, transactions, wallets, and peers.
+- [x] Add consistent loading, empty, error, and retry states.
+- [x] Add frontend smoke tests for navigation and deep-link workflows.
+- [x] Add a frontend CI step for build and UI verification.
 
 ### Phase 10: Observability and Release Readiness
 

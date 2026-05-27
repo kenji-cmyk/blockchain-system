@@ -1,5 +1,6 @@
 import { FileJson, RefreshCw } from "lucide-react";
 import { navItems } from "../../lib/navigation.jsx";
+import { routeToHash } from "../../lib/routes.js";
 
 function Sidebar({ activeView, setActiveView, health, onRefresh, busy }) {
   return (
@@ -19,15 +20,15 @@ function Sidebar({ activeView, setActiveView, health, onRefresh, busy }) {
             const Icon = item.icon;
             const active = activeView === item.id;
             return (
-              <button
+              <a
                 key={item.id}
-                type="button"
+                href={routeToHash(item.id)}
                 onClick={() => setActiveView(item.id)}
                 className={`nav-button ${active ? "nav-button-active" : ""}`}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
-              </button>
+              </a>
             );
           })}
         </nav>

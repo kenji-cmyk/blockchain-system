@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Pickaxe, Send, Sparkles } from "lucide-react";
 import { TransactionTable } from "../components/blockchain/index.js";
 import { WalletSelect } from "../components/wallet/WalletSelect.jsx";
-import { GlassPanel, LabeledInput, StatusChip } from "../components/ui/index.js";
+import { ApiState, GlassPanel, LabeledInput, StatusChip } from "../components/ui/index.js";
 import { api } from "../lib/api.js";
 import { shortHash } from "../lib/format.js";
 
-function MiningView({ data, wallets, runAction, busy }) {
+function MiningView({ data, wallets, runAction, busy, loading, loadError, refresh }) {
   const [senderIndex, setSenderIndex] = useState("0");
   const [receiverIndex, setReceiverIndex] = useState("1");
   const [minerIndex, setMinerIndex] = useState("0");
@@ -90,7 +90,9 @@ function MiningView({ data, wallets, runAction, busy }) {
           </div>
           <StatusChip>{data.pending.length} TX</StatusChip>
         </div>
-        <TransactionTable transactions={data.pending} />
+        <ApiState loading={loading} error={loadError} empty={!data.pending.length} emptyMessage="No pending transactions." onRetry={refresh}>
+          <TransactionTable transactions={data.pending} />
+        </ApiState>
       </GlassPanel>
     </div>
   );

@@ -1,5 +1,6 @@
 import { EmptyState } from "../ui/index.js";
 import { formatNumber, shortHash } from "../../lib/format.js";
+import { detailHash } from "../../lib/routes.js";
 
 function TransactionTable({ transactions }) {
   if (!transactions.length) return <EmptyState message="No pending transactions." />;
@@ -18,7 +19,11 @@ function TransactionTable({ transactions }) {
         <tbody>
           {transactions.map((transaction) => (
             <tr key={transaction.transactionId} className="border-t border-white/10 font-mono text-xs">
-              <td className="px-4 py-3">{shortHash(transaction.transactionId)}</td>
+              <td className="px-4 py-3">
+                <a className="text-lime hover:text-white" href={detailHash("transactions", transaction.transactionId)}>
+                  {shortHash(transaction.transactionId)}
+                </a>
+              </td>
               <td className="px-4 py-3">{shortHash(transaction.sender)}</td>
               <td className="px-4 py-3">{shortHash(transaction.receiver)}</td>
               <td className="px-4 py-3">{formatNumber(transaction.amount)}</td>

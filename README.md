@@ -44,9 +44,10 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Adds request tracing with `X-Request-Id`.
 - Protects operator routes with bearer-token roles and rate-limits expensive mining/broadcast APIs.
 - Enforces request-size limits and rejects malformed, replayed, or oversized peer payloads.
-- Serves a responsive luminous dark React/Tailwind web UI for chain browsing, wallets, transactions, mining, and peer sync demos.
+- Serves a responsive luminous dark React/Tailwind web UI with route-based navigation, deep links, and detail pages for blocks, transactions, wallets, and peers.
+- Provides consistent loading, empty, error, and retry states for API-backed frontend panels.
 - Organizes the frontend into layout, UI, blockchain, wallet, peer, view, hook, and API helper modules.
-- Includes CI workflow for frontend build, backend tests, and Docker image build.
+- Includes CI workflow for frontend build, frontend smoke tests, backend tests, and Docker image build.
 - Includes Docker and Docker Compose setup.
 - Includes MockMvc tests for all current APIs.
 
@@ -223,18 +224,11 @@ Completed:
 - Phase 6: UTXO ledger replay, coin selection, change outputs, spent-output validation, same-block transaction dependency validation, stronger transaction canonicalization, and ledger-level hardening tests.
 - Phase 7: node identity and capability handshakes, peer scoring and unhealthy-peer eviction, optional scheduled sync, gossip headers and relay, and peer message safeguards for duplicate, stale, malformed, and oversized payloads.
 - Phase 8: bearer-token operator/read-only roles, protected admin and peer-management routes, rate limiting for expensive endpoints, request-size boundaries, and security/system smoke tests.
+- Phase 9: route-based frontend navigation, deep links, block/transaction/wallet/peer detail pages, consistent API loading/error/empty/retry states, frontend smoke tests, and CI frontend verification.
 
 ## Future Plan
 
 The core learning roadmap through Phase 5 is complete. Future work should move the project from a learning demo toward a stronger distributed-systems sandbox while keeping the code understandable.
-
-### Phase 9: Frontend Productization
-
-- Add route-based navigation and deep links for blocks, transactions, wallets, and peers.
-- Add block, transaction, and wallet detail pages.
-- Add loading, empty, error, and retry states for every API-backed panel.
-- Add responsive E2E tests for critical UI flows.
-- Add a frontend CI job for build and browser smoke tests.
 
 ### Phase 10: Observability and Release Readiness
 

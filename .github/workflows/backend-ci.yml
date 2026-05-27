@@ -39,6 +39,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Run frontend smoke tests
+        working-directory: frontend
+        run: npm run test:smoke
+
       - name: Test
         run: mvn test
 

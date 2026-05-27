@@ -1,5 +1,6 @@
 import { api } from "../../lib/api.js";
 import { shortHash } from "../../lib/format.js";
+import { detailHash } from "../../lib/routes.js";
 import { StatusChip } from "../ui/index.js";
 
 function PeerCard({ peer, runAction }) {
@@ -7,7 +8,7 @@ function PeerCard({ peer, runAction }) {
     <article className="rounded-xl border border-white/10 bg-void/45 p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-white">{peer.peerId}</h3>
+          <a className="font-bold text-white hover:text-lime" href={detailHash("peers", peer.peerId)}>{peer.peerId}</a>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">{peer.mode || "simulated"}</p>
         </div>
         <StatusChip tone={peer.valid && peer.healthy ? "success" : "danger"}>{peer.healthy ? "ONLINE" : "CHECK"}</StatusChip>

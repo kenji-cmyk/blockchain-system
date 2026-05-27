@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { BlockList, ConflictList } from "../components/blockchain/index.js";
-import { GlassPanel, LabeledInput, MiniMetric, Segmented } from "../components/ui/index.js";
+import { ApiState, GlassPanel, LabeledInput, MiniMetric, Segmented } from "../components/ui/index.js";
 import { api } from "../lib/api.js";
 
-function Explorer({ data, runAction, busy }) {
+function Explorer({ data, runAction, busy, loading, loadError, refresh }) {
   const [filter, setFilter] = useState("all");
   const [difficulty, setDifficulty] = useState(data.status?.difficulty || 2);
   const [tamperIndex, setTamperIndex] = useState(1);
@@ -34,7 +34,9 @@ function Explorer({ data, runAction, busy }) {
           </div>
           <Segmented value={filter} onChange={setFilter} options={[["all", "All"], ["rewards", "Rewards"], ["transactions", "Transactions"]]} />
         </div>
-        <BlockList blocks={blocks} />
+        <ApiState loading={loading} error={loadError} empty={!blocks.length} emptyMessage="No blocks match this view." onRetry={refresh}>
+          <BlockList blocks={blocks} />
+        </ApiState>
       </GlassPanel>
       <div className="space-y-4">
         <GlassPanel>
@@ -61,7 +63,9 @@ function Explorer({ data, runAction, busy }) {
             <MiniMetric label="Forks" value={data.forks.length} />
             <MiniMetric label="Orphans" value={data.orphans.length} />
           </div>
-          <ConflictList forks={data.forks} orphans={data.orphans} />
+          <ApiState loading={loading} error={loadError} onRetry={refresh}>
+            <ConflictList forks={data.forks} orphans={data.orphans} />
+          </ApiState>
         </GlassPanel>
         <GlassPanel>
           <h2 className="panel-title mb-4">Tamper Lab</h2>

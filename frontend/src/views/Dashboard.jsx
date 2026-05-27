@@ -1,9 +1,9 @@
 import { Activity, ChevronRight, FileJson, HardDrive, KeyRound, Layers3, RefreshCw, ShieldCheck } from "lucide-react";
 import { BlockList, NodeMap, StatCard } from "../components/blockchain/index.js";
-import { GlassPanel, StatusChip } from "../components/ui/index.js";
+import { ApiState, GlassPanel, StatusChip } from "../components/ui/index.js";
 import { formatNumber, shortHash } from "../lib/format.js";
 
-function Dashboard({ data, derived, refresh, createWallet, runAction, busy }) {
+function Dashboard({ data, derived, refresh, createWallet, runAction, busy, loading, loadError }) {
   const stats = [
     { label: "Block Height", value: data.status?.size ?? "-", note: derived.head ? `Head ${shortHash(derived.head.hash)}` : "Waiting for chain", icon: Layers3 },
     { label: "Difficulty", value: `${data.status?.difficulty ?? "-"} zeros`, note: `Target ${"0".repeat(data.status?.difficulty || 0)}...`, icon: HardDrive },
@@ -49,7 +49,9 @@ function Dashboard({ data, derived, refresh, createWallet, runAction, busy }) {
               <h2 className="panel-title">Recent Blocks</h2>
               <span className="text-xs font-bold uppercase tracking-wider text-muted">{data.blocks.length} total</span>
             </div>
-            <BlockList blocks={derived.latestBlocks} compact />
+            <ApiState loading={loading} error={loadError} empty={!derived.latestBlocks.length} emptyMessage="No blocks loaded yet." onRetry={refresh}>
+              <BlockList blocks={derived.latestBlocks} compact />
+            </ApiState>
           </GlassPanel>
         </div>
         <div className="space-y-4">

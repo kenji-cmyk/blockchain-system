@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, Network, Pickaxe, RefreshCw } from "lucide-react";
 import { PeerCard } from "../components/peers/PeerCard.jsx";
 import { WalletSelect } from "../components/wallet/WalletSelect.jsx";
-import { EmptyState, GlassPanel, LabeledInput, StatusChip } from "../components/ui/index.js";
+import { ApiState, GlassPanel, LabeledInput, StatusChip } from "../components/ui/index.js";
 import { api } from "../lib/api.js";
 
-function PeersView({ data, wallets, runAction, busy }) {
+function PeersView({ data, wallets, runAction, busy, loading, loadError, refresh }) {
   const [peerId, setPeerId] = useState("node-b");
   const [baseUrl, setBaseUrl] = useState("");
   const [peerUrls, setPeerUrls] = useState("http://localhost:8081");
@@ -97,13 +97,11 @@ function PeersView({ data, wallets, runAction, busy }) {
             </div>
             <StatusChip>{data.peers.length} peers</StatusChip>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {data.peers.length === 0 ? (
-              <EmptyState message="Register a simulated or HTTP peer to test conflict resolution." />
-            ) : (
-              data.peers.map((peer) => <PeerCard key={peer.peerId} peer={peer} runAction={runAction} />)
-            )}
-          </div>
+          <ApiState loading={loading} error={loadError} empty={!data.peers.length} emptyMessage="Register a simulated or HTTP peer to test conflict resolution." onRetry={refresh}>
+            <div className="grid gap-3 md:grid-cols-2">
+              {data.peers.map((peer) => <PeerCard key={peer.peerId} peer={peer} runAction={runAction} />)}
+            </div>
+          </ApiState>
         </GlassPanel>
       </div>
     </div>

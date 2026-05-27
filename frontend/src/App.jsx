@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header, Sidebar } from "./components/layout/index.js";
 import { Toast } from "./components/ui/index.js";
-import { Dashboard, Explorer, MiningView, PeersView, WalletView } from "./views/index.js";
+import { Dashboard, DetailView, Explorer, MiningView, PeersView, WalletView } from "./views/index.js";
 import { api } from "./lib/api.js";
+import { parseRoute, routeToHash } from "./lib/routes.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 
 function App() {
-  const [activeView, setActiveView] = useState("dashboard");
+  const [route, setRoute] = useState(() => parseRoute(window.location.hash));
   const [data, setData] = useState({
     status: null,
     health: null,
@@ -20,7 +21,9 @@ function App() {
   const [wallets, setWallets] = useLocalStorage("luminousWallets", []);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
+  const activeView = route.view;
 
   const notify = useCallback((message, tone = "success") => {
     setToast({ message, tone, id: Date.now() });
@@ -40,7 +43,9 @@ function App() {
         api.get("/api/chain/orphans")
       ]);
       setData({ status, health, metrics, blocks, pending, peers, forks, orphans });
+      setLoadError("");
     } catch (error) {
+      setLoadError(error.message);
       notify(error.message, "danger");
     } finally {
       setLoading(false);
@@ -50,6 +55,13 @@ function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(parseRoute(window.location.hash));
+    if (!window.location.hash) window.history.replaceState(null, "", routeToHash("dashboard"));
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -102,14 +114,18 @@ function App() {
     return runAction(() => api.post("/api/chain/reset"), "Chain reset complete.");
   };
 
-  const viewProps = { data, wallets, setWallets, derived, busy, runAction, notify, refresh, createWallet };
+  const navigate = useCallback((view) => {
+    window.location.hash = routeToHash(view);
+  }, []);
+
+  const viewProps = { data, wallets, setWallets, derived, busy, loading, loadError, route, runAction, notify, refresh, createWallet };
 
   return (
     <div className="min-h-screen bg-void text-text">
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_18%_10%,rgba(174,248,0,0.11),transparent_27rem),radial-gradient(circle_at_78%_2%,rgba(107,254,156,0.08),transparent_24rem)]" />
       <div className="fixed inset-0 -z-10 bg-grid bg-[length:32px_32px] opacity-40" />
       <div className="flex min-h-screen">
-        <Sidebar activeView={activeView} setActiveView={setActiveView} health={data.health} onRefresh={refresh} busy={busy || loading} />
+        <Sidebar activeView={activeView} setActiveView={navigate} health={data.health} onRefresh={refresh} busy={busy || loading} />
         <main className="min-w-0 flex-1 lg:pl-[260px]">
           <Header
             activeView={activeView}
@@ -120,11 +136,17 @@ function App() {
             busy={busy}
           />
           <div className="mx-auto max-w-[1440px] px-4 pb-24 pt-24 sm:px-6 lg:px-8">
-            {activeView === "dashboard" && <Dashboard {...viewProps} />}
-            {activeView === "explorer" && <Explorer {...viewProps} />}
-            {activeView === "wallet" && <WalletView {...viewProps} />}
-            {activeView === "mining" && <MiningView {...viewProps} />}
-            {activeView === "peers" && <PeersView {...viewProps} />}
+            {route.detailType ? (
+              <DetailView {...viewProps} />
+            ) : (
+              <>
+                {activeView === "dashboard" && <Dashboard {...viewProps} />}
+                {activeView === "explorer" && <Explorer {...viewProps} />}
+                {activeView === "wallet" && <WalletView {...viewProps} />}
+                {activeView === "mining" && <MiningView {...viewProps} />}
+                {activeView === "peers" && <PeersView {...viewProps} />}
+              </>
+            )}
           </div>
         </main>
       </div>
