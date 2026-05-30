@@ -289,6 +289,22 @@ GET /api/docs/openapi
 
 This returns an OpenAPI 3.0 JSON document for the available learning APIs.
 
+### Swagger UI
+
+```http
+GET /swagger-ui
+```
+
+This serves a Swagger UI page pointed at `GET /api/docs/openapi`.
+
+### Apidog Import JSON
+
+```http
+GET /api/docs/apidog
+```
+
+Import this URL in Apidog as an OpenAPI 3.0 document. The JSON includes local multi-node server URLs, bearer-token security metadata, request body examples, and placeholders such as `{{senderPublicKey}}`, `{{receiverPublicKey}}`, `{{senderPrivateKey}}`, and `{{minerPublicKey}}`. For local protected endpoints, set the bearer token to `operator-token` unless the config has been changed.
+
 ### View Node Info
 
 ```http

@@ -37,6 +37,7 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Exposes a tamper API for validation demos.
 - Returns unified JSON error responses.
 - Exposes an OpenAPI JSON document at `GET /api/docs/openapi`.
+- Serves Swagger UI at `GET /swagger-ui` and an Apidog import JSON at `GET /api/docs/apidog`.
 - Logs mining time and nonce count.
 - Supports optional file persistence and normalized H2 database persistence.
 - Provides local, test, and docker application profiles.
@@ -205,6 +206,36 @@ Important endpoints:
 - `POST /api/transactions/broadcast`: accept a transaction broadcast from a peer.
 - `POST /api/blocks/broadcast`: accept a block broadcast from a peer.
 - `GET /api/docs/openapi`: view the OpenAPI document.
+- `GET /api/docs/apidog`: importable OpenAPI JSON with Apidog notes and request examples.
+- `GET /swagger-ui`: Swagger UI for exploring the API in a browser.
+
+## Swagger and Apidog
+
+Run the backend, then open Swagger UI:
+
+```text
+http://localhost:8080/swagger-ui
+```
+
+For Apidog, import this URL as an OpenAPI 3.0 document:
+
+```text
+http://localhost:8080/api/docs/apidog
+```
+
+Or import the static file directly:
+
+```text
+docs/apidog-blockchain-api.json
+```
+
+Use `http://localhost:8080` as the local server URL. Protected demo endpoints use bearer authentication; the default local operator token is:
+
+```text
+operator-token
+```
+
+The Apidog/OpenAPI document includes request examples using placeholders such as `{{senderPublicKey}}`, `{{receiverPublicKey}}`, `{{senderPrivateKey}}`, and `{{minerPublicKey}}`. Create wallets first, then copy those values into Apidog environment variables before testing transaction and mining flows.
 
 ## Balance Model
 

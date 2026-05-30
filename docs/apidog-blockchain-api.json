@@ -1,0 +1,1802 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Blockchain System API - Apidog Test Import",
+    "version": "0.0.1",
+    "description": "Import this OpenAPI JSON into Apidog. Set bearer auth to operator-token for protected local demo endpoints. Use variables such as {{senderPublicKey}}, {{senderPrivateKey}}, {{receiverPublicKey}}, {{minerPublicKey}}, {{peerId}}, {{transactionId}}, and {{blockHash}} while testing."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local backend"
+    },
+    {
+      "url": "http://localhost:8081",
+      "description": "Docker Compose node-b"
+    },
+    {
+      "url": "http://localhost:8082",
+      "description": "Docker Compose node-c"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Blocks",
+      "description": "Block, chain, validation, and tamper APIs"
+    },
+    {
+      "name": "Wallets",
+      "description": "Wallet generation and balance APIs"
+    },
+    {
+      "name": "Transactions",
+      "description": "Transaction creation, mempool, broadcast, and mining APIs"
+    },
+    {
+      "name": "Peers",
+      "description": "Peer registration, health, discovery, gossip, and sync APIs"
+    },
+    {
+      "name": "Operations",
+      "description": "Health, metrics, docs, and node metadata APIs"
+    },
+    {
+      "name": "V1 Enveloped",
+      "description": "Versioned APIs returning success/data/error/metadata envelopes"
+    }
+  ],
+  "x-apidog-import-notes": [
+    "Import this file as OpenAPI 3.0 in Apidog.",
+    "Create wallets first, then copy public/private keys into Apidog variables.",
+    "Use operator-token as the Bearer token unless backend config changed.",
+    "Legacy /api endpoints return raw learning payloads. /api/v1 endpoints return envelopes."
+  ],
+  "paths": {
+    "/api/blocks": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "View the entire chain",
+        "operationId": "getLegacyBlocks",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Mine a legacy demo reward block",
+        "operationId": "postLegacyBlock",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AddBlockRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/blocks/{index}": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "View a block by index",
+        "operationId": "getLegacyBlockByIndex",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BlockIndex"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/blocks/broadcast": {
+      "post": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Accept a broadcast block from a peer",
+        "operationId": "postLegacyBroadcastBlock",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BlockBroadcastRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          }
+        }
+      }
+    },
+    "/api/wallets/new": {
+      "get": {
+        "tags": [
+          "Wallets"
+        ],
+        "summary": "Create a new RSA wallet",
+        "operationId": "getLegacyNewWallet",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/wallets/{address}/balance": {
+      "get": {
+        "tags": [
+          "Wallets"
+        ],
+        "summary": "View wallet available balance",
+        "operationId": "getLegacyWalletBalance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WalletAddress"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/transactions": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Create and sign a transaction",
+        "operationId": "postLegacyTransaction",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateTransactionRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/transactions/pending": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "View pending transactions",
+        "operationId": "getLegacyPendingTransactions",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/transactions/mine": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Mine pending transactions",
+        "operationId": "postLegacyMineTransactions",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MineTransactionsRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/api/transactions/broadcast": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Accept a broadcast transaction from a peer",
+        "operationId": "postLegacyBroadcastTransaction",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TransactionBroadcastRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          }
+        }
+      }
+    },
+    "/api/chain/status": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "View chain status",
+        "operationId": "getLegacyChainStatus",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/chain/validate": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Validate the chain",
+        "operationId": "getLegacyChainValidate",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/chain/forks": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "View tracked fork blocks",
+        "operationId": "getLegacyForks",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/chain/orphans": {
+      "get": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "View tracked orphan blocks",
+        "operationId": "getLegacyOrphans",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/chain/difficulty": {
+      "put": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Update mining difficulty",
+        "operationId": "putLegacyDifficulty",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DifficultyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/chain/tamper": {
+      "post": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Tamper with a block for validation demos",
+        "operationId": "postLegacyTamper",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TamperBlockRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/chain/reset": {
+      "post": {
+        "tags": [
+          "Blocks"
+        ],
+        "summary": "Reset chain state",
+        "operationId": "postLegacyReset",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/node/info": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "View local node identity and capabilities",
+        "operationId": "getLegacyNodeInfo",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/ops/health": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "View operations health",
+        "operationId": "getLegacyOpsHealth",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/ops/metrics": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "View operations metrics",
+        "operationId": "getLegacyOpsMetrics",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/docs/openapi": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "View runtime OpenAPI JSON",
+        "operationId": "getRuntimeOpenApi",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/docs/apidog": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "View runtime Apidog import JSON",
+        "operationId": "getRuntimeApidogJson",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/peers": {
+      "get": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "View registered peers",
+        "operationId": "getLegacyPeers",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Register a simulated or HTTP peer",
+        "operationId": "postLegacyPeer",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RegisterPeerRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/peers/discover": {
+      "post": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Discover peers from base URLs",
+        "operationId": "postLegacyPeerDiscover",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PeerDiscoveryRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/peers/broadcast/transactions": {
+      "post": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Broadcast current pending transactions",
+        "operationId": "postLegacyPeerBroadcastTransactions",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/api/peers/{peerId}/health": {
+      "get": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Check peer health",
+        "operationId": "getLegacyPeerHealth",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/peers/{peerId}/chain": {
+      "get": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Fetch peer chain",
+        "operationId": "getLegacyPeerChain",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/peers/{peerId}": {
+      "delete": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Remove peer",
+        "operationId": "deleteLegacyPeer",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/peers/{peerId}/blocks": {
+      "post": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Mine a demo block on a peer",
+        "operationId": "postLegacyPeerBlock",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MinePeerBlockRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/peers/{peerId}/sync": {
+      "post": {
+        "tags": [
+          "Peers"
+        ],
+        "summary": "Sync from a peer",
+        "operationId": "postLegacyPeerSync",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/blocks": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetBlocks"
+      },
+      "post": {
+        "$ref": "#/components/pathItems/V1PostBlock"
+      }
+    },
+    "/api/v1/blocks/{index}": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetBlockByIndex"
+      }
+    },
+    "/api/v1/blocks/broadcast": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostBroadcastBlock"
+      }
+    },
+    "/api/v1/wallets/new": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetNewWallet"
+      }
+    },
+    "/api/v1/wallets/{address}/balance": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetWalletBalance"
+      }
+    },
+    "/api/v1/transactions": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostTransaction"
+      }
+    },
+    "/api/v1/transactions/pending": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetPendingTransactions"
+      }
+    },
+    "/api/v1/transactions/mine": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostMineTransactions"
+      }
+    },
+    "/api/v1/transactions/broadcast": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostBroadcastTransaction"
+      }
+    },
+    "/api/v1/chain/status": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetChainStatus"
+      }
+    },
+    "/api/v1/chain/validate": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetChainValidate"
+      }
+    },
+    "/api/v1/chain/forks": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetForks"
+      }
+    },
+    "/api/v1/chain/orphans": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetOrphans"
+      }
+    },
+    "/api/v1/chain/difficulty": {
+      "put": {
+        "$ref": "#/components/pathItems/V1PutDifficulty"
+      }
+    },
+    "/api/v1/chain/tamper": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostTamper"
+      }
+    },
+    "/api/v1/chain/reset": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostReset"
+      }
+    },
+    "/api/v1/node/info": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetNodeInfo"
+      }
+    },
+    "/api/v1/ops/health": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetOpsHealth"
+      }
+    },
+    "/api/v1/ops/metrics": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetOpsMetrics"
+      }
+    },
+    "/api/v1/peers": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetPeers"
+      },
+      "post": {
+        "$ref": "#/components/pathItems/V1PostPeer"
+      }
+    },
+    "/api/v1/peers/discover": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostPeerDiscover"
+      }
+    },
+    "/api/v1/peers/broadcast/transactions": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostPeerBroadcastTransactions"
+      }
+    },
+    "/api/v1/peers/{peerId}/health": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetPeerHealth"
+      }
+    },
+    "/api/v1/peers/{peerId}/chain": {
+      "get": {
+        "$ref": "#/components/pathItems/V1GetPeerChain"
+      }
+    },
+    "/api/v1/peers/{peerId}": {
+      "delete": {
+        "$ref": "#/components/pathItems/V1DeletePeer"
+      }
+    },
+    "/api/v1/peers/{peerId}/blocks": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostPeerBlock"
+      }
+    },
+    "/api/v1/peers/{peerId}/sync": {
+      "post": {
+        "$ref": "#/components/pathItems/V1PostPeerSync"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "operatorBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "operator-token"
+      }
+    },
+    "parameters": {
+      "BlockIndex": {
+        "name": "index",
+        "in": "path",
+        "required": true,
+        "description": "Block index",
+        "schema": {
+          "type": "integer",
+          "example": 0
+        }
+      },
+      "WalletAddress": {
+        "name": "address",
+        "in": "path",
+        "required": true,
+        "description": "Wallet public key / address",
+        "schema": {
+          "type": "string",
+          "example": "{{senderPublicKey}}"
+        }
+      },
+      "PeerId": {
+        "name": "peerId",
+        "in": "path",
+        "required": true,
+        "description": "Registered peer id",
+        "schema": {
+          "type": "string",
+          "example": "node-b"
+        }
+      }
+    },
+    "responses": {
+      "Ok": {
+        "description": "OK",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Created": {
+        "description": "Created",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Bad Request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized"
+      },
+      "Forbidden": {
+        "description": "Forbidden"
+      },
+      "NotFound": {
+        "description": "Not Found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Payload Too Large",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Too Many Requests",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "V1Ok": {
+        "description": "OK enveloped response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiEnvelope"
+            }
+          }
+        }
+      },
+      "V1Created": {
+        "description": "Created enveloped response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "requestBodies": {
+      "AddBlockRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AddBlockRequest"
+            },
+            "example": {
+              "data": "{{minerPublicKey}}"
+            }
+          }
+        }
+      },
+      "CreateTransactionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateTransactionRequest"
+            },
+            "example": {
+              "sender": "{{senderPublicKey}}",
+              "receiver": "{{receiverPublicKey}}",
+              "amount": 1.25,
+              "fee": 0.05,
+              "privateKey": "{{senderPrivateKey}}"
+            }
+          }
+        }
+      },
+      "MineTransactionsRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MineTransactionsRequest"
+            },
+            "example": {
+              "rewardAddress": "{{minerPublicKey}}"
+            }
+          }
+        }
+      },
+      "DifficultyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DifficultyRequest"
+            },
+            "example": {
+              "difficulty": 2
+            }
+          }
+        }
+      },
+      "TamperBlockRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TamperBlockRequest"
+            },
+            "example": {
+              "index": 1,
+              "data": "tampered-data"
+            }
+          }
+        }
+      },
+      "RegisterPeerRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RegisterPeerRequest"
+            },
+            "examples": {
+              "simulated": {
+                "value": {
+                  "peerId": "node-b"
+                }
+              },
+              "http": {
+                "value": {
+                  "peerId": "node-b",
+                  "baseUrl": "http://localhost:8081"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PeerDiscoveryRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PeerDiscoveryRequest"
+            },
+            "example": {
+              "peerUrls": [
+                "http://localhost:8081",
+                "http://localhost:8082"
+              ]
+            }
+          }
+        }
+      },
+      "MinePeerBlockRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MinePeerBlockRequest"
+            },
+            "example": {
+              "minerAddress": "{{minerPublicKey}}"
+            }
+          }
+        }
+      },
+      "BlockBroadcastRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Block"
+            },
+            "example": {
+              "index": 1,
+              "previousHash": "{{previousHash}}",
+              "hash": "{{blockHash}}",
+              "transactions": []
+            }
+          }
+        }
+      },
+      "TransactionBroadcastRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Transaction"
+            },
+            "example": {
+              "sender": "{{senderPublicKey}}",
+              "receiver": "{{receiverPublicKey}}",
+              "amount": 1,
+              "fee": 0,
+              "transactionId": "{{transactionId}}"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ApiEnvelope": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "nullable": true
+          },
+          "error": {
+            "nullable": true,
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "integer",
+            "example": 400
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request"
+          },
+          "message": {
+            "type": "string",
+            "example": "Sender balance is insufficient"
+          },
+          "path": {
+            "type": "string",
+            "example": "/api/transactions"
+          }
+        }
+      },
+      "AddBlockRequest": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "example": "{{minerPublicKey}}"
+          }
+        }
+      },
+      "CreateTransactionRequest": {
+        "type": "object",
+        "required": [
+          "sender",
+          "receiver",
+          "amount",
+          "privateKey"
+        ],
+        "properties": {
+          "sender": {
+            "type": "string",
+            "example": "{{senderPublicKey}}"
+          },
+          "receiver": {
+            "type": "string",
+            "example": "{{receiverPublicKey}}"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "example": 1.25
+          },
+          "fee": {
+            "type": "number",
+            "format": "double",
+            "example": 0.05
+          },
+          "privateKey": {
+            "type": "string",
+            "example": "{{senderPrivateKey}}"
+          }
+        }
+      },
+      "MineTransactionsRequest": {
+        "type": "object",
+        "required": [
+          "rewardAddress"
+        ],
+        "properties": {
+          "rewardAddress": {
+            "type": "string",
+            "example": "{{minerPublicKey}}"
+          }
+        }
+      },
+      "DifficultyRequest": {
+        "type": "object",
+        "required": [
+          "difficulty"
+        ],
+        "properties": {
+          "difficulty": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "example": 2
+          }
+        }
+      },
+      "TamperBlockRequest": {
+        "type": "object",
+        "required": [
+          "index",
+          "data"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "example": 1
+          },
+          "data": {
+            "type": "string",
+            "example": "tampered-data"
+          }
+        }
+      },
+      "RegisterPeerRequest": {
+        "type": "object",
+        "required": [
+          "peerId"
+        ],
+        "properties": {
+          "peerId": {
+            "type": "string",
+            "example": "node-b"
+          },
+          "baseUrl": {
+            "type": "string",
+            "example": "http://localhost:8081"
+          }
+        }
+      },
+      "PeerDiscoveryRequest": {
+        "type": "object",
+        "required": [
+          "peerUrls"
+        ],
+        "properties": {
+          "peerUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "http://localhost:8081",
+              "http://localhost:8082"
+            ]
+          }
+        }
+      },
+      "MinePeerBlockRequest": {
+        "type": "object",
+        "required": [
+          "minerAddress"
+        ],
+        "properties": {
+          "minerAddress": {
+            "type": "string",
+            "example": "{{minerPublicKey}}"
+          }
+        }
+      },
+      "Block": {
+        "type": "object"
+      },
+      "Transaction": {
+        "type": "object"
+      }
+    },
+    "pathItems": {
+      "V1GetBlocks": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View the entire chain with envelope",
+        "operationId": "getV1Blocks",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostBlock": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Mine a legacy demo reward block with envelope",
+        "operationId": "postV1Block",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AddBlockRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/V1Created"
+          }
+        }
+      },
+      "V1GetBlockByIndex": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View a block by index with envelope",
+        "operationId": "getV1BlockByIndex",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BlockIndex"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostBroadcastBlock": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Accept a broadcast block with envelope",
+        "operationId": "postV1BroadcastBlock",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BlockBroadcastRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetNewWallet": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Create wallet with envelope",
+        "operationId": "getV1NewWallet",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetWalletBalance": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View wallet balance with envelope",
+        "operationId": "getV1WalletBalance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WalletAddress"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostTransaction": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Create transaction with envelope",
+        "operationId": "postV1Transaction",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateTransactionRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/V1Created"
+          }
+        }
+      },
+      "V1GetPendingTransactions": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View pending transactions with envelope",
+        "operationId": "getV1PendingTransactions",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostMineTransactions": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Mine pending transactions with envelope",
+        "operationId": "postV1MineTransactions",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MineTransactionsRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/V1Created"
+          }
+        }
+      },
+      "V1PostBroadcastTransaction": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Accept broadcast transaction with envelope",
+        "operationId": "postV1BroadcastTransaction",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TransactionBroadcastRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetChainStatus": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View chain status with envelope",
+        "operationId": "getV1ChainStatus",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetChainValidate": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Validate chain with envelope",
+        "operationId": "getV1ChainValidate",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetForks": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View fork blocks with envelope",
+        "operationId": "getV1Forks",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetOrphans": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View orphan blocks with envelope",
+        "operationId": "getV1Orphans",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PutDifficulty": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Update difficulty with envelope",
+        "operationId": "putV1Difficulty",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DifficultyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostTamper": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Tamper chain with envelope",
+        "operationId": "postV1Tamper",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TamperBlockRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostReset": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Reset chain with envelope",
+        "operationId": "postV1Reset",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetNodeInfo": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View node info with envelope",
+        "operationId": "getV1NodeInfo",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetOpsHealth": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View health with envelope",
+        "operationId": "getV1OpsHealth",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetOpsMetrics": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View metrics with envelope",
+        "operationId": "getV1OpsMetrics",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetPeers": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "View peers with envelope",
+        "operationId": "getV1Peers",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostPeer": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Register peer with envelope",
+        "operationId": "postV1Peer",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RegisterPeerRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/V1Created"
+          }
+        }
+      },
+      "V1PostPeerDiscover": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Discover peers with envelope",
+        "operationId": "postV1PeerDiscover",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PeerDiscoveryRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostPeerBroadcastTransactions": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Broadcast pending transactions with envelope",
+        "operationId": "postV1PeerBroadcastTransactions",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetPeerHealth": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Check peer health with envelope",
+        "operationId": "getV1PeerHealth",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1GetPeerChain": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Fetch peer chain with envelope",
+        "operationId": "getV1PeerChain",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1DeletePeer": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Remove peer with envelope",
+        "operationId": "deleteV1Peer",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      },
+      "V1PostPeerBlock": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Mine peer block with envelope",
+        "operationId": "postV1PeerBlock",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MinePeerBlockRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/V1Created"
+          }
+        }
+      },
+      "V1PostPeerSync": {
+        "tags": [
+          "V1 Enveloped"
+        ],
+        "summary": "Sync from peer with envelope",
+        "operationId": "postV1PeerSync",
+        "security": [
+          {
+            "operatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PeerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/V1Ok"
+          }
+        }
+      }
+    }
+  }
+}
