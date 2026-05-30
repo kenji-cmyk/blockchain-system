@@ -1,6 +1,7 @@
 package com.kna.backend.controller;
 
 import com.kna.backend.dto.ApiError;
+import com.kna.backend.dto.ApiEnvelope;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +17,7 @@ import java.util.stream.Collectors;
 public class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiError> handleValidation(
+    public ResponseEntity<?> handleValidation(
             MethodArgumentNotValidException exception,
             HttpServletRequest request
     ) {
@@ -30,7 +31,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ApiError> handleResponseStatus(
+    public ResponseEntity<?> handleResponseStatus(
             ResponseStatusException exception,
             HttpServletRequest request
     ) {
@@ -39,7 +40,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiError> handleIllegalArgument(
+    public ResponseEntity<?> handleIllegalArgument(
             IllegalArgumentException exception,
             HttpServletRequest request
     ) {
@@ -47,20 +48,22 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiError> handleUnexpected(
+    public ResponseEntity<?> handleUnexpected(
             Exception exception,
             HttpServletRequest request
     ) {
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected backend error", request.getRequestURI());
     }
 
-    private ResponseEntity<ApiError> build(HttpStatus status, String message, String path) {
-        return ResponseEntity.status(status).body(new ApiError(
+    private ResponseEntity<?> build(HttpStatus status, String message, String path) {
+        ApiError error = new ApiError(
                 Instant.now(),
                 status.value(),
                 status.getReasonPhrase(),
                 message,
                 path
-        ));
+        );
+        Object body = path.startsWith("/api/v1/") ? ApiEnvelope.failure(error) : error;
+        return ResponseEntity.status(status).body(body);
     }
 }

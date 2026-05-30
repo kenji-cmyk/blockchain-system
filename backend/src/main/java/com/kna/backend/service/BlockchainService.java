@@ -9,6 +9,7 @@ import com.kna.backend.entity.UtxoEntry;
 import com.kna.backend.entity.UtxoKey;
 import com.kna.backend.entity.Wallet;
 import com.kna.backend.pkg.utils.CryptoUtil;
+import com.kna.backend.pkg.money.MoneyUnits;
 import com.kna.backend.pkg.validate.UtxoLedger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -412,6 +413,12 @@ public class BlockchainService {
         }
         if (fee < 0) {
             throw new IllegalArgumentException("Transaction fee must be greater than or equal to 0");
+        }
+        try {
+            MoneyUnits.toUnits(amount);
+            MoneyUnits.toUnits(fee);
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("Transaction amount and fee support up to 8 decimal places", exception);
         }
     }
 

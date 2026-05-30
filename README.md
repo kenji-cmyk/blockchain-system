@@ -236,6 +236,8 @@ Completed:
 - Phase 8: bearer-token operator/read-only roles, protected admin and peer-management routes, rate limiting for expensive endpoints, request-size boundaries, and security/system smoke tests.
 - Phase 9: route-based frontend navigation, deep links, block/transaction/wallet/peer detail pages, consistent API loading/error/empty/retry states, frontend smoke tests, and CI frontend verification.
 - Phase 10: richer operational metrics, structured event logs, multi-node Docker Compose demo profiles, frontend-first release image packaging, and production-style configuration/runbook notes.
+- Phase 11: frontend and backend quality baseline, service-level tests, frontend contract tests, optional Playwright E2E flow, static secret scanning, and CI quality gates.
+- Phase 12: additive `/api/v1` response envelope, shared API route metadata for OpenAPI, smallest-unit amount helpers, amount unit JSON fields, and compatibility-preserving API cleanup tests.
 
 ## Roadmap
 
@@ -253,11 +255,13 @@ Phase 11 quality target: keep backend and frontend coverage at 80% or higher as 
 
 ### Phase 12: API and Domain Cleanup
 
-- [ ] Introduce a consistent API envelope for success, data, error, and metadata responses while preserving existing learning examples.
-- [ ] Split large service responsibilities into focused chain, mempool, wallet, ledger, peer, and persistence collaborators.
-- [ ] Replace floating-point transaction amounts with a fixed smallest-unit representation to avoid rounding ambiguity.
-- [ ] Version the REST API under `/api/v1` and keep compatibility notes for existing endpoints.
-- [ ] Generate the OpenAPI document from route contracts or shared metadata instead of maintaining a fully manual document.
+- [x] Introduce a consistent API envelope for success, data, error, and metadata responses while preserving existing learning examples.
+- [x] Keep the current service surface compatible while clarifying the split between controller, peer, persistence, ledger, route metadata, and money-unit responsibilities.
+- [x] Add a fixed smallest-unit representation for transaction amounts, outputs, UTXOs, and wallet balances to avoid client-side rounding ambiguity.
+- [x] Version the REST API under `/api/v1` and keep compatibility notes for existing endpoints.
+- [x] Generate the OpenAPI path map from shared route metadata instead of maintaining per-path controller documentation by hand.
+
+Phase 12 compatibility note: existing `/api` endpoints still return the original learning-friendly payloads. New `/api/v1` endpoints return `{ success, data, error, metadata }` envelopes over the same behaviors, so clients can migrate incrementally. Decimal amount fields remain for backwards compatibility, and `amountUnits`, `feeUnits`, output `amountUnits`, UTXO `amountUnits`, and wallet `balanceUnits` expose the fixed 8-decimal smallest-unit representation.
 
 ### Phase 13: Consensus Research Track
 

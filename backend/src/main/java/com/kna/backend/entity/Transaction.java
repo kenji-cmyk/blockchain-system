@@ -2,8 +2,8 @@ package com.kna.backend.entity;
 
 import com.kna.backend.pkg.utils.CryptoUtil;
 import com.kna.backend.pkg.utils.StringUtil;
+import com.kna.backend.pkg.money.MoneyUnits;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -124,7 +124,7 @@ public class Transaction {
         }
         TransactionOutput paymentOutput = getOutputs().getFirst();
         return receiver.equals(paymentOutput.receiver())
-                && amountsEqual(paymentOutput.amount(), amount)
+                && MoneyUnits.equals(paymentOutput.amount(), amount)
                 && getOutputs().stream().allMatch(output ->
                 output.receiver() != null
                         && !output.receiver().isBlank()
@@ -133,12 +133,8 @@ public class Transaction {
         );
     }
 
-    private static boolean amountsEqual(double left, double right) {
-        return Math.abs(left - right) < 0.00000001;
-    }
-
     private static String canonicalAmount(double value) {
-        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        return MoneyUnits.canonical(value);
     }
 
     public String getSender() {
@@ -153,8 +149,16 @@ public class Transaction {
         return amount;
     }
 
+    public long getAmountUnits() {
+        return MoneyUnits.toUnits(amount);
+    }
+
     public double getFee() {
         return fee;
+    }
+
+    public long getFeeUnits() {
+        return MoneyUnits.toUnits(fee);
     }
 
     public long getTimeStamp() {
