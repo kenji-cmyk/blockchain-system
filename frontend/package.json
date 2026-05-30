@@ -7,7 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test:smoke": "node --test tests/*.test.mjs"
+    "test:smoke": "node --test tests/api.test.mjs tests/components.test.mjs tests/routes.test.mjs",
+    "test:e2e": "node --test tests/e2e.playwright.test.mjs",
+    "test:quality": "node ../scripts/scan-secrets.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",

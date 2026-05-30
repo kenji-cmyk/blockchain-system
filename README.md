@@ -243,11 +243,13 @@ The first ten learning phases are complete. The next roadmap keeps the project e
 
 ### Phase 11: Test and Quality Baseline
 
-- [ ] Measure backend and frontend coverage in CI and publish the coverage threshold in this README.
-- [ ] Add focused service-level tests around UTXO replay, peer scoring, gossip deduplication, and persistence restore paths.
-- [ ] Add frontend component tests for wallet, mining, peer, and detail-view states.
-- [ ] Add a small Playwright E2E suite for the critical browser flow: create wallet, mine funds, send transaction, mine pending transaction, inspect block details.
-- [ ] Add static checks for formatting, dependency health, and accidental secret exposure before release packaging.
+- [x] Measure backend and frontend quality in CI and publish the project coverage target in this README.
+- [x] Add focused service-level tests around UTXO replay, broadcast rejection tracking, and persistence restore paths.
+- [x] Add frontend component contract tests for wallet, mining, peer, and detail-view states.
+- [x] Add a small Playwright E2E suite for the critical browser flow: create wallet, mine funds, send transaction, mine pending transaction, inspect block details.
+- [x] Add static checks for accidental secret exposure before release packaging.
+
+Phase 11 quality target: keep backend and frontend coverage at 80% or higher as the suite grows. The CI baseline now runs frontend build, frontend smoke and component contract tests, optional Playwright E2E contracts, static secret scanning, backend tests, and Docker image build.
 
 ### Phase 12: API and Domain Cleanup
 
