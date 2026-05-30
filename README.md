@@ -237,9 +237,73 @@ Completed:
 - Phase 9: route-based frontend navigation, deep links, block/transaction/wallet/peer detail pages, consistent API loading/error/empty/retry states, frontend smoke tests, and CI frontend verification.
 - Phase 10: richer operational metrics, structured event logs, multi-node Docker Compose demo profiles, frontend-first release image packaging, and production-style configuration/runbook notes.
 
-## Future Plan
+## Roadmap
 
-The roadmap through Phase 10 is complete. Future work should focus on optional extensions such as stronger consensus research, richer browser automation, or replacing demo credentials with a real identity provider.
+The first ten learning phases are complete. The next roadmap keeps the project educational while moving it closer to a realistic distributed ledger lab. Each phase should follow the ECC workflow: plan first, write failing tests before implementation, keep security checks explicit, and update project documentation when behavior changes.
+
+### Phase 11: Test and Quality Baseline
+
+- [ ] Measure backend and frontend coverage in CI and publish the coverage threshold in this README.
+- [ ] Add focused service-level tests around UTXO replay, peer scoring, gossip deduplication, and persistence restore paths.
+- [ ] Add frontend component tests for wallet, mining, peer, and detail-view states.
+- [ ] Add a small Playwright E2E suite for the critical browser flow: create wallet, mine funds, send transaction, mine pending transaction, inspect block details.
+- [ ] Add static checks for formatting, dependency health, and accidental secret exposure before release packaging.
+
+### Phase 12: API and Domain Cleanup
+
+- [ ] Introduce a consistent API envelope for success, data, error, and metadata responses while preserving existing learning examples.
+- [ ] Split large service responsibilities into focused chain, mempool, wallet, ledger, peer, and persistence collaborators.
+- [ ] Replace floating-point transaction amounts with a fixed smallest-unit representation to avoid rounding ambiguity.
+- [ ] Version the REST API under `/api/v1` and keep compatibility notes for existing endpoints.
+- [ ] Generate the OpenAPI document from route contracts or shared metadata instead of maintaining a fully manual document.
+
+### Phase 13: Consensus Research Track
+
+- [ ] Add adjustable consensus policies for longest valid chain, cumulative difficulty, and finality-delay demos.
+- [ ] Store competing fork branches with enough metadata to inspect why a branch was accepted, rejected, or kept as a fork.
+- [ ] Add orphan reattachment when missing parent blocks arrive from peers.
+- [ ] Add deterministic block and transaction serialization tests that protect cross-node compatibility.
+- [ ] Document the tradeoffs between the demo consensus model and production blockchain consensus.
+
+### Phase 14: Network Reliability
+
+- [ ] Add peer backoff, quarantine, and recovery states instead of immediate score-only eviction.
+- [ ] Add peer inventory messages so nodes can announce block and transaction ids before sending full payloads.
+- [ ] Add bounded mempool capacity with eviction rules and clear rejection reasons.
+- [ ] Add network-partition demo scripts for the Docker Compose multi-node profile.
+- [ ] Add metrics for peer latency, retry count, duplicate gossip messages, and fork adoption events.
+
+### Phase 15: Security Hardening
+
+- [ ] Replace demo bearer tokens with pluggable authentication suitable for local OAuth2/OIDC or signed operator tokens.
+- [ ] Add authorization tests for every state-changing endpoint and peer-management route.
+- [ ] Add key-rotation guidance and startup validation for required production-style secrets.
+- [ ] Add stronger replay protection for peer messages with bounded nonce or timestamp windows.
+- [ ] Run dependency and container vulnerability checks in CI before publishing images.
+
+### Phase 16: Productized Operator UI
+
+- [ ] Add an operator settings screen for difficulty, mining limits, peer timeout, retry, and scheduled sync state.
+- [ ] Add a transaction builder that explains selected UTXOs, fees, and change outputs before signing.
+- [ ] Add fork, orphan, and peer-gossip timelines for easier multi-node debugging.
+- [ ] Add an operations dashboard for health, metrics, rate limits, and recent structured events.
+- [ ] Add E2E coverage for deep links, responsive layout, and empty/error/retry states.
+
+### Phase 17: Persistence and Migration Maturity
+
+- [ ] Replace the simple schema migration tracker with a standard migration tool such as Flyway or Liquibase.
+- [ ] Add backup and restore examples for the H2 demo database volume.
+- [ ] Add repository interfaces around persistence so storage backends can be tested independently.
+- [ ] Add data-integrity checks on startup for persisted blocks, transactions, wallets, peers, and mempool entries.
+- [ ] Document migration and rollback steps in the backend runbook.
+
+### Phase 18: Release and Deployment Readiness
+
+- [ ] Add image tagging, SBOM generation, and reproducible release notes to CI.
+- [ ] Add environment-specific configuration examples for local, docker, and production-like deployments.
+- [ ] Add smoke tests that run against the built Docker image, not only source-level tests.
+- [ ] Add a multi-node release checklist covering secrets, persistence, ports, peer discovery, and health checks.
+- [ ] Keep the default deployment safe for demos by binding local examples to localhost and documenting exposed-network risks.
 
 ## Notes
 
