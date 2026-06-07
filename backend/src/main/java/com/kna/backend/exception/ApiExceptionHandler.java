@@ -1,4 +1,4 @@
-package com.kna.backend.controller;
+package com.kna.backend.exception;
 
 import com.kna.backend.dto.ApiError;
 import com.kna.backend.dto.ApiEnvelope;

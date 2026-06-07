@@ -582,8 +582,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `service/OperationalMetricsService.java`: resettable counters for validation, mining, broadcast, peer sync, and rejected payload activity.
 - `service/PeerNodeService.java`: simulated peers, HTTP peers, node-info handshakes, capability metadata, scoring, eviction, scheduled sync, gossip broadcasts, peer mining, and conflict resolution.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
-- `controller/ApiExceptionHandler.java`: unified API error responses.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
+- `exception/ApiExceptionHandler.java`: unified API error responses.
 - `config/ApiSecurityFilter.java`: bearer-token operator/read-only checks and request-size enforcement.
 - `config/RateLimitingFilter.java`: per-client rate limiting for expensive mining and broadcast endpoints.
 - `resources/static/`: built React/Tailwind client assets generated from the root `frontend/` project, including hash-route deep links for blocks, transactions, wallets, and peers.
