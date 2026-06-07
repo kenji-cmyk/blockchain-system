@@ -63,7 +63,9 @@ public class PeerNodeService {
             "gossip-broadcast",
             "block-broadcast",
             "transaction-broadcast",
-            "utxo-ledger"
+            "utxo-ledger",
+            "consensus-policy",
+            "orphan-reattach"
     );
 
     public PeerNodeService(

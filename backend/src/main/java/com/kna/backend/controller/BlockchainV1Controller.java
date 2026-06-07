@@ -7,6 +7,9 @@ import com.kna.backend.dto.BlockReference;
 import com.kna.backend.dto.BlockchainStatus;
 import com.kna.backend.dto.BroadcastBlockResult;
 import com.kna.backend.dto.BroadcastResult;
+import com.kna.backend.dto.ConsensusBranch;
+import com.kna.backend.dto.ConsensusSettings;
+import com.kna.backend.dto.ConsensusSettingsRequest;
 import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
 import com.kna.backend.dto.MinePeerBlockRequest;
@@ -189,6 +192,22 @@ public class BlockchainV1Controller {
     public ApiEnvelope<List<BlockReference>> getOrphanBlocks() {
         List<BlockReference> blocks = controller.getOrphanBlocks();
         return ApiEnvelope.ok(blocks, Map.of("count", blocks.size()));
+    }
+
+    @GetMapping("/chain/consensus")
+    public ApiEnvelope<ConsensusSettings> getConsensusSettings() {
+        return ApiEnvelope.ok(controller.getConsensusSettings());
+    }
+
+    @PutMapping("/chain/consensus")
+    public ApiEnvelope<ConsensusSettings> updateConsensusSettings(@Valid @RequestBody ConsensusSettingsRequest request) {
+        return ApiEnvelope.ok(controller.updateConsensusSettings(request));
+    }
+
+    @GetMapping("/chain/branches")
+    public ApiEnvelope<List<ConsensusBranch>> getConsensusBranches() {
+        List<ConsensusBranch> branches = controller.getConsensusBranches();
+        return ApiEnvelope.ok(branches, Map.of("count", branches.size()));
     }
 
     @GetMapping("/ops/health")

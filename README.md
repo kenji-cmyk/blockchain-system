@@ -10,9 +10,11 @@ This is not a production blockchain. The project intentionally keeps the archite
 - Mines blocks with proof-of-work and configurable difficulty.
 - Validates block hashes, previous hash links, difficulty, transaction signatures, and transaction count limits.
 - Replays complete transaction history during chain validation to reject overspending chains.
-- Selects peer chains by cumulative difficulty instead of simple length.
-- Tracks fork and orphan blocks received from peers.
-- Uses deterministic block hash serialization.
+- Selects peer chains by adjustable consensus policy: cumulative difficulty or longest valid chain.
+- Supports a finality-delay demo setting to reject reorgs across finalized local blocks.
+- Tracks fork, orphan, accepted, and rejected branch decisions with inspectable consensus metadata.
+- Reattaches orphan blocks when their missing parent block later arrives from a peer.
+- Uses deterministic block and transaction serialization.
 - Generates URL-safe RSA wallet public/private key pairs.
 - Creates and signs transactions.
 - Supports optional transaction fees.
@@ -86,7 +88,8 @@ Key areas:
 - `backend/README.md`: detailed backend documentation, API examples, configuration, and roadmap.
 - `backend/src/main/java/com/kna/backend/entity`: `Block`, `Transaction`, and `Wallet` models.
 - `backend/src/main/java/com/kna/backend/service`: chain, mining, validation, persistence, balance, and peer sync logic.
-- `backend/src/main/java/com/kna/backend/controller`: REST API controllers and error handling.
+- `backend/src/main/java/com/kna/backend/controller`: REST API controllers.
+- `backend/src/main/java/com/kna/backend/exception`: global API error handling.
 - `backend/src/main/resources/static`: built frontend assets served by Spring Boot.
 - `backend/src/test`: API tests.
 
@@ -188,6 +191,9 @@ Important endpoints:
 - `GET /api/chain/validate`: validate the chain.
 - `GET /api/chain/forks`: view tracked fork blocks.
 - `GET /api/chain/orphans`: view tracked orphan blocks.
+- `GET /api/chain/consensus`: view consensus policy and finality-delay settings.
+- `PUT /api/chain/consensus`: update the consensus policy and finality-delay demo setting.
+- `GET /api/chain/branches`: view accepted, rejected, fork, and orphan branch decisions.
 - `PUT /api/chain/difficulty`: update mining difficulty.
 - `POST /api/chain/tamper`: intentionally tamper with a block.
 - `POST /api/chain/reset`: reset chain state.
@@ -269,10 +275,11 @@ Completed:
 - Phase 10: richer operational metrics, structured event logs, multi-node Docker Compose demo profiles, frontend-first release image packaging, and production-style configuration/runbook notes.
 - Phase 11: frontend and backend quality baseline, service-level tests, frontend contract tests, optional Playwright E2E flow, static secret scanning, and CI quality gates.
 - Phase 12: additive `/api/v1` response envelope, shared API route metadata for OpenAPI, smallest-unit amount helpers, amount unit JSON fields, and compatibility-preserving API cleanup tests.
+- Phase 13: adjustable consensus policy demos, finality-delay checks, branch decision metadata, orphan reattachment, deterministic serialization coverage, and consensus tradeoff documentation.
 
 ## Roadmap
 
-The first ten learning phases are complete. The next roadmap keeps the project educational while moving it closer to a realistic distributed ledger lab. Each phase should follow the ECC workflow: plan first, write failing tests before implementation, keep security checks explicit, and update project documentation when behavior changes.
+The first thirteen learning phases are complete. The next roadmap keeps the project educational while moving it closer to a realistic distributed ledger lab. Each phase should follow the ECC workflow: plan first, write failing tests before implementation, keep security checks explicit, and update project documentation when behavior changes.
 
 ### Phase 11: Test and Quality Baseline
 
@@ -296,11 +303,13 @@ Phase 12 compatibility note: existing `/api` endpoints still return the original
 
 ### Phase 13: Consensus Research Track
 
-- [ ] Add adjustable consensus policies for longest valid chain, cumulative difficulty, and finality-delay demos.
-- [ ] Store competing fork branches with enough metadata to inspect why a branch was accepted, rejected, or kept as a fork.
-- [ ] Add orphan reattachment when missing parent blocks arrive from peers.
-- [ ] Add deterministic block and transaction serialization tests that protect cross-node compatibility.
-- [ ] Document the tradeoffs between the demo consensus model and production blockchain consensus.
+- [x] Add adjustable consensus policies for longest valid chain, cumulative difficulty, and finality-delay demos.
+- [x] Store competing fork branches with enough metadata to inspect why a branch was accepted, rejected, or kept as a fork.
+- [x] Add orphan reattachment when missing parent blocks arrive from peers.
+- [x] Add deterministic block and transaction serialization tests that protect cross-node compatibility.
+- [x] Document the tradeoffs between the demo consensus model and production blockchain consensus.
+
+Phase 13 consensus note: this remains an educational single-process/HTTP-peer model, not production consensus. `cumulative-difficulty` is the default policy because it better represents proof-of-work than simple length, while `longest-chain` is available for demos that compare textbook conflict resolution. `finalityDelayBlocks=0` disables finality protection for backwards-compatible learning flows; setting it above zero rejects peer candidates that rewrite blocks older than the configured local delay. Branch decisions are kept as recent in-memory metadata so learners can inspect why a candidate was accepted, rejected, kept as a fork, or stored as an orphan.
 
 ### Phase 14: Network Reliability
 

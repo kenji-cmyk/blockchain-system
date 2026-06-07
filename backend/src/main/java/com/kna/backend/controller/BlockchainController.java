@@ -6,6 +6,9 @@ import com.kna.backend.dto.BlockReference;
 import com.kna.backend.dto.BlockchainStatus;
 import com.kna.backend.dto.BroadcastBlockResult;
 import com.kna.backend.dto.BroadcastResult;
+import com.kna.backend.dto.ConsensusBranch;
+import com.kna.backend.dto.ConsensusSettings;
+import com.kna.backend.dto.ConsensusSettingsRequest;
 import com.kna.backend.dto.CreateTransactionRequest;
 import com.kna.backend.dto.DifficultyRequest;
 import com.kna.backend.dto.MinePeerBlockRequest;
@@ -283,6 +286,21 @@ public class BlockchainController {
     @GetMapping("/chain/orphans")
     public List<BlockReference> getOrphanBlocks() {
         return blockchainService.getOrphanBlocks();
+    }
+
+    @GetMapping("/chain/consensus")
+    public ConsensusSettings getConsensusSettings() {
+        return blockchainService.getConsensusSettings();
+    }
+
+    @PutMapping("/chain/consensus")
+    public ConsensusSettings updateConsensusSettings(@Valid @RequestBody ConsensusSettingsRequest request) {
+        return blockchainService.updateConsensusSettings(request.policy(), request.finalityDelayBlocks());
+    }
+
+    @GetMapping("/chain/branches")
+    public List<ConsensusBranch> getConsensusBranches() {
+        return blockchainService.getConsensusBranches();
     }
 
     @GetMapping("/ops/health")

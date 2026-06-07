@@ -66,7 +66,7 @@ public class Transaction {
         if (isMiningReward()) {
             return;
         }
-        this.signature = CryptoUtil.sign(privateKey, signingPayload());
+        this.signature = CryptoUtil.sign(privateKey, getSigningPayload());
     }
 
     public boolean isValid() {
@@ -88,7 +88,7 @@ public class Transaction {
         if (!hasCanonicalOutputs()) {
             return false;
         }
-        return CryptoUtil.verify(sender, signingPayload(), signature);
+        return CryptoUtil.verify(sender, getSigningPayload(), signature);
     }
 
     public boolean isMiningReward() {
@@ -96,10 +96,10 @@ public class Transaction {
     }
 
     private String calculateTransactionId() {
-        return StringUtil.applySha256(signingPayload());
+        return StringUtil.applySha256(getSigningPayload());
     }
 
-    private String signingPayload() {
+    public String getSigningPayload() {
         StringBuilder payload = new StringBuilder();
         payload.append("sender=").append(sender).append('\n');
         payload.append("receiver=").append(receiver).append('\n');

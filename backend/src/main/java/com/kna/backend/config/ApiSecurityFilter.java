@@ -71,8 +71,8 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
 
     private boolean requiresOperator(HttpServletRequest request) {
         String method = request.getMethod();
-        String path = request.getRequestURI();
-        if ("PUT".equals(method) && "/api/chain/difficulty".equals(path)) {
+        String path = request.getRequestURI().replaceFirst("^/api/v1", "/api");
+        if ("PUT".equals(method) && Set.of("/api/chain/difficulty", "/api/chain/consensus").contains(path)) {
             return true;
         }
         if ("POST".equals(method) && Set.of("/api/chain/reset", "/api/chain/tamper").contains(path)) {

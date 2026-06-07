@@ -99,6 +99,8 @@ class BlockchainServicePhase11Tests {
                 DIFFICULTY,
                 MINING_REWARD,
                 MAX_TRANSACTIONS_PER_BLOCK,
+                "cumulative-difficulty",
+                0,
                 persistenceService,
                 metricsService
         );

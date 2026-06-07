@@ -1,6 +1,9 @@
 package com.kna.backend.service;
 
+import com.kna.backend.consensus.ConsensusPolicy;
 import com.kna.backend.dto.BlockReference;
+import com.kna.backend.dto.ConsensusBranch;
+import com.kna.backend.dto.ConsensusSettings;
 import com.kna.backend.entity.Block;
 import com.kna.backend.entity.Transaction;
 import com.kna.backend.entity.TransactionInput;
@@ -16,9 +19,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.kna.backend.pkg.validate.Validator.cumulativeDifficulty;
 import static com.kna.backend.pkg.validate.Validator.isChainValid;
@@ -32,9 +37,12 @@ public class BlockchainService {
     private final List<Transaction> pendingTransactions = new ArrayList<>();
     private final List<Block> forkBlocks = new ArrayList<>();
     private final List<Block> orphanBlocks = new ArrayList<>();
+    private final List<ConsensusBranch> consensusBranches = new ArrayList<>();
     private final ChainPersistenceService chainPersistenceService;
     private final OperationalMetricsService operationalMetricsService;
     private int difficulty;
+    private ConsensusPolicy consensusPolicy;
+    private int finalityDelayBlocks;
     private final double miningReward;
     private final int maxTransactionsPerBlock;
 
@@ -42,6 +50,8 @@ public class BlockchainService {
             @Value("${blockchain.difficulty:3}") int difficulty,
             @Value("${blockchain.mining-reward:10}") double miningReward,
             @Value("${blockchain.max-transactions-per-block:5}") int maxTransactionsPerBlock,
+            @Value("${blockchain.consensus.policy:cumulative-difficulty}") String consensusPolicy,
+            @Value("${blockchain.consensus.finality-delay-blocks:0}") int finalityDelayBlocks,
             ChainPersistenceService chainPersistenceService,
             OperationalMetricsService operationalMetricsService
     ) {
@@ -52,6 +62,8 @@ public class BlockchainService {
         this.maxTransactionsPerBlock = maxTransactionsPerBlock;
         this.chainPersistenceService = chainPersistenceService;
         this.operationalMetricsService = operationalMetricsService;
+        this.consensusPolicy = ConsensusPolicy.fromKey(consensusPolicy);
+        setFinalityDelayBlocks(finalityDelayBlocks);
         setDifficulty(difficulty);
         loadOrReset();
     }
@@ -70,13 +82,23 @@ public class BlockchainService {
         }
         if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
             rememberCandidateBlocks(candidateChain);
-            return false;
-        }
-        if (cumulativeDifficulty(candidateChain, difficulty) <= cumulativeDifficulty(blockchain, difficulty)) {
-            rememberCandidateBlocks(candidateChain);
+            recordConsensusBranch(candidateChain, "rejected", "Candidate chain is invalid");
             return false;
         }
 
+        if (rewritesFinalizedBlocks(candidateChain)) {
+            rememberCandidateBlocks(candidateChain);
+            recordConsensusBranch(candidateChain, "rejected", "Candidate chain would reorganize finalized blocks");
+            return false;
+        }
+
+        if (!isCandidateStronger(candidateChain)) {
+            rememberCandidateBlocks(candidateChain);
+            recordConsensusBranch(candidateChain, "fork", notSelectedReason(candidateChain));
+            return false;
+        }
+
+        recordConsensusBranch(candidateChain, "accepted", "Candidate chain accepted by " + consensusPolicy.key());
         blockchain.clear();
         blockchain.addAll(candidateChain);
         pendingTransactions.clear();
@@ -179,12 +201,14 @@ public class BlockchainService {
         Block previousBlock = blockchain.getLast();
         if (block.getIndex() != blockchain.size()) {
             rememberBlock(block);
+            recordSingleBlockBranch(block, "orphan", "Block index is not the next expected index");
             operationalMetricsService.recordBroadcastBlockRejected();
             LOGGER.warn("event=block_rejected source=peer reason=\"unexpected index\" index={} expectedIndex={} hash={}", block.getIndex(), blockchain.size(), block.getHash());
             return false;
         }
         if (!previousBlock.getHash().equals(block.getPreviousHash())) {
             rememberBlock(block);
+            recordSingleBlockBranch(block, "fork", "Block points to a competing fork parent");
             operationalMetricsService.recordBroadcastBlockRejected();
             LOGGER.warn("event=block_rejected source=peer reason=\"previous hash mismatch\" index={} hash={}", block.getIndex(), block.getHash());
             return false;
@@ -194,6 +218,7 @@ public class BlockchainService {
         candidateChain.add(block);
         if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
             rememberBlock(block);
+            recordConsensusBranch(candidateChain, "rejected", "Candidate chain is invalid");
             operationalMetricsService.recordBroadcastBlockRejected();
             LOGGER.warn("event=block_rejected source=peer reason=\"candidate chain invalid\" index={} hash={}", block.getIndex(), block.getHash());
             return false;
@@ -201,6 +226,8 @@ public class BlockchainService {
 
         blockchain.add(block);
         removeMinedPendingTransactions(block);
+        recordConsensusBranch(new ArrayList<>(blockchain), "accepted", "Broadcast block extends the local chain");
+        reattachKnownOrphans();
         chainPersistenceService.savePendingTransactions(pendingTransactions);
         chainPersistenceService.saveChain(blockchain);
         operationalMetricsService.recordBroadcastBlockAccepted();
@@ -218,6 +245,7 @@ public class BlockchainService {
         pendingTransactions.clear();
         forkBlocks.clear();
         orphanBlocks.clear();
+        consensusBranches.clear();
         Block genesisBlock = new Block(0, List.of(Transaction.miningReward("GENESIS", miningReward)), "0");
         mineAndLog(genesisBlock, "genesis");
         blockchain.add(genesisBlock);
@@ -263,6 +291,20 @@ public class BlockchainService {
         return cumulativeDifficulty(blockchain, difficulty);
     }
 
+    public synchronized ConsensusSettings getConsensusSettings() {
+        return new ConsensusSettings(consensusPolicy.key(), finalityDelayBlocks);
+    }
+
+    public synchronized ConsensusSettings updateConsensusSettings(String policy, int finalityDelayBlocks) {
+        this.consensusPolicy = ConsensusPolicy.fromKey(policy);
+        setFinalityDelayBlocks(finalityDelayBlocks);
+        return getConsensusSettings();
+    }
+
+    public synchronized List<ConsensusBranch> getConsensusBranches() {
+        return List.copyOf(consensusBranches);
+    }
+
     public synchronized List<BlockReference> getForkBlocks() {
         return forkBlocks.stream()
                 .map(this::toReference)
@@ -288,6 +330,13 @@ public class BlockchainService {
             throw new IllegalArgumentException("Difficulty must be between 0 and 6");
         }
         this.difficulty = difficulty;
+    }
+
+    private void setFinalityDelayBlocks(int finalityDelayBlocks) {
+        if (finalityDelayBlocks < 0) {
+            throw new IllegalArgumentException("Finality delay blocks must be greater than or equal to 0");
+        }
+        this.finalityDelayBlocks = finalityDelayBlocks;
     }
 
     private void validateData(String data) {
@@ -426,6 +475,169 @@ public class BlockchainService {
         return blockchain.stream()
                 .flatMap(block -> block.getTransactions().stream())
                 .anyMatch(transaction -> transaction.getTransactionId().equals(transactionId));
+    }
+
+    private boolean isCandidateStronger(List<Block> candidateChain) {
+        return switch (consensusPolicy) {
+            case LONGEST_CHAIN -> candidateChain.size() > blockchain.size();
+            case CUMULATIVE_DIFFICULTY -> cumulativeDifficulty(candidateChain, difficulty) > cumulativeDifficulty(blockchain, difficulty);
+        };
+    }
+
+    private String notSelectedReason(List<Block> candidateChain) {
+        return switch (consensusPolicy) {
+            case LONGEST_CHAIN -> "Valid competing fork was kept because it is not longer than the local chain";
+            case CUMULATIVE_DIFFICULTY ->
+                    "Valid competing fork was kept because it does not have more cumulative difficulty";
+        };
+    }
+
+    private boolean rewritesFinalizedBlocks(List<Block> candidateChain) {
+        if (finalityDelayBlocks <= 0) {
+            return false;
+        }
+        int finalizedIndex = blockchain.size() - 1 - finalityDelayBlocks;
+        if (finalizedIndex < 0) {
+            return false;
+        }
+        if (candidateChain.size() <= finalizedIndex) {
+            return true;
+        }
+        for (int index = 0; index <= finalizedIndex; index++) {
+            if (!blockchain.get(index).getHash().equals(candidateChain.get(index).getHash())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void reattachKnownOrphans() {
+        boolean attached;
+        do {
+            attached = false;
+            Block nextOrphan = nextAttachableOrphan();
+            if (nextOrphan == null) {
+                return;
+            }
+
+            List<Block> candidateChain = new ArrayList<>(blockchain);
+            candidateChain.add(nextOrphan);
+            orphanBlocks.removeIf(block -> block.getHash().equals(nextOrphan.getHash()));
+
+            if (!isChainValid(candidateChain, difficulty, maxTransactionsPerBlock, miningReward)) {
+                rememberBlock(nextOrphan);
+                recordConsensusBranch(candidateChain, "rejected", "Orphan could not be reattached because the candidate chain is invalid");
+                continue;
+            }
+
+            blockchain.add(nextOrphan);
+            removeMinedPendingTransactions(nextOrphan);
+            operationalMetricsService.recordBroadcastBlockAccepted();
+            recordConsensusBranch(new ArrayList<>(blockchain), "accepted", "Orphan reattached after missing parent arrived");
+            LOGGER.info("event=block_accepted source=orphan_reattach index={} hash={}", nextOrphan.getIndex(), nextOrphan.getHash());
+            attached = true;
+        } while (attached);
+    }
+
+    private Block nextAttachableOrphan() {
+        String expectedPreviousHash = blockchain.getLast().getHash();
+        int expectedIndex = blockchain.size();
+        return orphanBlocks.stream()
+                .filter(block -> block.getIndex() == expectedIndex)
+                .filter(block -> expectedPreviousHash.equals(block.getPreviousHash()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void recordSingleBlockBranch(Block block, String fallbackStatus, String reason) {
+        String status = blockchain.stream().anyMatch(existing -> existing.getHash().equals(block.getPreviousHash()))
+                ? "fork"
+                : fallbackStatus;
+        String resolvedReason = "fork".equals(status) && !reason.contains("fork")
+                ? "Block is a valid competing fork candidate"
+                : reason;
+        ConsensusBranch branch = new ConsensusBranch(
+                UUID.randomUUID().toString(),
+                status,
+                resolvedReason,
+                consensusPolicy.key(),
+                finalityDelayBlocks,
+                1,
+                cumulativeDifficulty(List.of(block), difficulty),
+                blockchain.size(),
+                cumulativeDifficulty(blockchain, difficulty),
+                parentIndex(block.getPreviousHash()),
+                parentHash(block.getPreviousHash()),
+                toReference(block),
+                Instant.now()
+        );
+        addConsensusBranch(branch);
+    }
+
+    private void recordConsensusBranch(List<Block> candidateChain, String status, String reason) {
+        if (candidateChain == null || candidateChain.isEmpty()) {
+            return;
+        }
+        Block tip = candidateChain.getLast();
+        ConsensusBranch branch = new ConsensusBranch(
+                UUID.randomUUID().toString(),
+                status,
+                reason,
+                consensusPolicy.key(),
+                finalityDelayBlocks,
+                candidateChain.size(),
+                cumulativeDifficulty(candidateChain, difficulty),
+                blockchain.size(),
+                cumulativeDifficulty(blockchain, difficulty),
+                commonAncestorIndex(candidateChain),
+                commonAncestorHash(candidateChain),
+                toReference(tip),
+                Instant.now()
+        );
+        addConsensusBranch(branch);
+    }
+
+    private void addConsensusBranch(ConsensusBranch branch) {
+        boolean duplicate = consensusBranches.stream()
+                .anyMatch(existing -> existing.tip().hash().equals(branch.tip().hash())
+                        && existing.status().equals(branch.status())
+                        && existing.reason().equals(branch.reason()));
+        if (!duplicate) {
+            consensusBranches.add(branch);
+        }
+        if (consensusBranches.size() > 50) {
+            consensusBranches.removeFirst();
+        }
+    }
+
+    private Integer commonAncestorIndex(List<Block> candidateChain) {
+        int commonIndex = -1;
+        int max = Math.min(blockchain.size(), candidateChain.size());
+        for (int index = 0; index < max; index++) {
+            if (!blockchain.get(index).getHash().equals(candidateChain.get(index).getHash())) {
+                break;
+            }
+            commonIndex = index;
+        }
+        return commonIndex == -1 ? null : commonIndex;
+    }
+
+    private String commonAncestorHash(List<Block> candidateChain) {
+        Integer index = commonAncestorIndex(candidateChain);
+        return index == null ? null : blockchain.get(index).getHash();
+    }
+
+    private Integer parentIndex(String parentHash) {
+        for (int index = 0; index < blockchain.size(); index++) {
+            if (blockchain.get(index).getHash().equals(parentHash)) {
+                return index;
+            }
+        }
+        return null;
+    }
+
+    private String parentHash(String parentHash) {
+        return parentIndex(parentHash) == null ? null : parentHash;
     }
 
     private void rememberCandidateBlocks(List<Block> candidateChain) {

@@ -11,6 +11,8 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Transactions: sender, receiver, amount, optional fee, timestamp, transaction id, nonce, UTXO inputs, outputs, and digital signature.
 - Balances: derived by replaying committed unspent transaction outputs, with pending outgoing transactions subtracted from the available balance.
 - Consensus checks: each block hash must match its content, each `previousHash` must link to the previous block, every hash must satisfy the configured proof-of-work difficulty, every transaction signature must be valid, spent outputs must not be reused, same-block dependencies must be valid, and each block must stay within the configured transaction count limit.
+- Consensus policy: peer candidates can be evaluated by cumulative difficulty or longest valid chain, with an optional finality-delay demo guard.
+- Fork/orphan research: branch decisions record accepted, rejected, fork, and orphan metadata, and orphan blocks are reattached when their missing parent arrives.
 - Genesis block: created automatically on startup and when the reset API is called.
 - Peer sync: simulated peers run inside the same application, and HTTP peers can point to other running backend instances for multi-instance demos.
 - Peer networking: HTTP peers support node-info handshakes, capability metadata, health checks, discovery by URL, removal, scoring, automatic unhealthy-peer eviction, transaction gossip, block gossip, and configurable timeout/retry handling.
@@ -24,6 +26,8 @@ This Spring Boot backend demonstrates a simple in-memory blockchain for learning
 - Default difficulty: `blockchain.difficulty=3`.
 - Default mining reward: `blockchain.mining-reward=10`.
 - Default transaction count limit: `blockchain.max-transactions-per-block=5`.
+- Default consensus policy: `blockchain.consensus.policy=cumulative-difficulty`.
+- Default finality delay: `blockchain.consensus.finality-delay-blocks=0`.
 - Default node id: generated at startup unless `blockchain.node.id` is set.
 - Default peer timeout: `blockchain.peer.timeout-ms=1500`.
 - Default peer retry attempts: `blockchain.peer.retry-attempts=2`.
@@ -185,6 +189,44 @@ Example response:
 ```http
 GET /api/chain/status
 ```
+
+### View Consensus Settings
+
+```http
+GET /api/chain/consensus
+```
+
+Example response:
+
+```json
+{
+  "policy": "cumulative-difficulty",
+  "finalityDelayBlocks": 0
+}
+```
+
+### Update Consensus Settings
+
+```http
+PUT /api/chain/consensus
+Authorization: Bearer OPERATOR_TOKEN
+Content-Type: application/json
+
+{
+  "policy": "longest-chain",
+  "finalityDelayBlocks": 2
+}
+```
+
+Supported policies are `cumulative-difficulty` and `longest-chain`. A finality delay of `0` keeps the previous demo behavior. Values above `0` reject candidate peer chains that rewrite finalized local blocks older than the configured delay.
+
+### View Consensus Branch Decisions
+
+```http
+GET /api/chain/branches
+```
+
+This returns recent in-memory consensus decisions with the selected policy, candidate tip, common ancestor, local/candidate work, status, and reason. It is meant for demos and diagnostics, not durable audit history.
 
 ### Adjust Difficulty
 
@@ -574,13 +616,14 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 ## Code Structure
 
 - `entity/Block.java`: block model, transaction list, hash calculation, mining, and tamper marker.
-- `entity/Transaction.java`: transaction model, UTXO inputs/outputs, signing, signature verification, and mining reward transactions.
+- `entity/Transaction.java`: transaction model, UTXO inputs/outputs, signing, signature verification, deterministic signing payloads, and mining reward transactions.
 - `entity/TransactionInput.java`, `TransactionOutput.java`, `UtxoEntry.java`, `UtxoKey.java`: immutable ledger value objects.
 - `entity/Wallet.java`: public/private key pair response model.
 - `service/BlockchainService.java`: in-memory chain, pending transaction pool, UTXO coin selection, balances, fees, block mining, validation, difficulty, and reset logic.
 - `service/ChainPersistenceService.java`: optional file or H2 database persistence for the chain.
 - `service/OperationalMetricsService.java`: resettable counters for validation, mining, broadcast, peer sync, and rejected payload activity.
 - `service/PeerNodeService.java`: simulated peers, HTTP peers, node-info handshakes, capability metadata, scoring, eviction, scheduled sync, gossip broadcasts, peer mining, and conflict resolution.
+- `consensus/ConsensusPolicy.java`: supported demo consensus policies and request parsing.
 - `controller/BlockchainController.java`: REST API for blocks, wallets, transactions, mining, and chain operations.
 - `controller/OpenApiController.java`: OpenAPI document endpoint.
 - `exception/ApiExceptionHandler.java`: unified API error responses.
@@ -592,6 +635,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - `pkg/validate/Validator.java`: chain, proof-of-work, previous hash, and transaction validation.
 - `pkg/validate/UtxoLedger.java`: UTXO replay, spent-output validation, same-block dependency checks, fee accounting, and balance calculation.
 - `dto/*`: request/response records for the API.
+- `ApiPhase13Tests.java`: MockMvc tests for consensus settings, branch decision endpoints, and OpenAPI coverage.
+- `ConsensusPhase13Tests.java`: service tests for policy/finality behavior, fork metadata, orphan reattachment, and deterministic serialization payloads.
 - `BackendApplicationTests.java`: MockMvc tests for block, chain, wallet, transaction, and mining workflows.
 - `DatabasePersistenceTests.java`: database-mode persistence tests for normalized tables.
 - `LedgerValidationTests.java`: ledger-level tests for UTXO dependencies, double-spend rejection, and invalid output canonicalization.
@@ -714,6 +759,29 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 - [x] Add multi-node Docker Compose demo profiles.
 - [x] Package backend releases only after frontend assets are built.
 - [x] Add production-style configuration notes and runbooks.
+
+### Phase 11: Test and Quality Baseline
+
+- [x] Add service-level quality tests around UTXO replay, broadcast rejection tracking, and persistence restore paths.
+- [x] Add frontend smoke, component, API, and optional E2E verification.
+- [x] Add static checks for accidental secret exposure before release packaging.
+
+### Phase 12: API and Domain Cleanup
+
+- [x] Add `/api/v1` response envelopes while preserving legacy `/api` responses.
+- [x] Share API route metadata with OpenAPI generation.
+- [x] Add smallest-unit amount fields for transactions, outputs, UTXOs, and balances.
+- [x] Move global API exception handling outside the controller package.
+
+### Phase 13: Consensus Research Track
+
+- [x] Add adjustable consensus policies for longest valid chain, cumulative difficulty, and finality-delay demos.
+- [x] Store competing branch metadata for accepted, rejected, fork, and orphan decisions.
+- [x] Reattach orphan blocks when missing parent blocks arrive.
+- [x] Add deterministic block and transaction serialization tests.
+- [x] Document demo consensus tradeoffs.
+
+Phase 13 note: this backend still favors inspectability over production consensus. Branch metadata is recent in-memory diagnostic state; finality delay is a teaching control; and HTTP peer sync remains a demo transport rather than a Byzantine-fault-tolerant network protocol.
 
 ### Section D: Code Quality and Observability
 

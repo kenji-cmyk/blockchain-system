@@ -24,10 +24,10 @@ public class Block {
     }
 
     public String calculateHash() {
-        return StringUtil.applySha256(canonicalPayload());
+        return StringUtil.applySha256(getCanonicalPayload());
     }
 
-    private String canonicalPayload() {
+    public String getCanonicalPayload() {
         StringBuilder payload = new StringBuilder();
         payload.append("index=").append(index).append('\n');
         payload.append("previousHash=").append(previousHash).append('\n');

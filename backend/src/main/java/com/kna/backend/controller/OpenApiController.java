@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 public class OpenApiController {
@@ -80,6 +81,7 @@ public class OpenApiController {
                 Map.of("name", "wallets", "description", "Wallet and balance operations"),
                 Map.of("name", "transactions", "description", "Transaction and mempool operations"),
                 Map.of("name", "peers", "description", "Peer registration, health, gossip, and sync"),
+                Map.of("name", "consensus", "description", "Consensus policy, forks, orphans, and branch decisions"),
                 Map.of("name", "operations", "description", "Health, metrics, and docs")
         ));
         spec.put("paths", paths());
@@ -170,6 +172,10 @@ public class OpenApiController {
             case "/api/peers/discover" -> jsonRequest("PeerDiscoveryRequest", Map.of("peerUrls", List.of("http://localhost:8081", "http://localhost:8082")));
             case "/api/peers/{peerId}/blocks" -> jsonRequest("MinePeerBlockRequest", Map.of("minerAddress", "{{minerPublicKey}}"));
             case "/api/chain/difficulty" -> jsonRequest("DifficultyRequest", Map.of("difficulty", 2));
+            case "/api/chain/consensus" -> jsonRequest("ConsensusSettingsRequest", Map.of(
+                    "policy", "cumulative-difficulty",
+                    "finalityDelayBlocks", 0
+            ));
             case "/api/chain/tamper" -> jsonRequest("TamperBlockRequest", Map.of("index", 1, "data", "tampered-data"));
             default -> null;
         };
@@ -219,6 +225,42 @@ public class OpenApiController {
                                 "privateKey", Map.of("type", "string", "example", "{{senderPrivateKey}}")
                         ))),
                         Map.entry("MineTransactionsRequest", objectSchema(Map.of("rewardAddress", Map.of("type", "string", "example", "{{minerPublicKey}}")))),
+                        Map.entry("ConsensusSettings", objectSchema(Map.of(
+                                "policy", Map.of(
+                                        "type", "string",
+                                        "enum", List.of("longest-chain", "cumulative-difficulty"),
+                                        "example", "cumulative-difficulty"
+                                ),
+                                "finalityDelayBlocks", Map.of("type", "integer", "minimum", 0, "example", 0)
+                        ))),
+                        Map.entry("ConsensusSettingsRequest", objectSchema(Map.of(
+                                "policy", Map.of(
+                                        "type", "string",
+                                        "enum", List.of("longest-chain", "cumulative-difficulty"),
+                                        "example", "longest-chain"
+                                ),
+                                "finalityDelayBlocks", Map.of("type", "integer", "minimum", 0, "example", 2)
+                        ))),
+                        Map.entry("ConsensusBranch", objectSchema(Map.ofEntries(
+                                Map.entry("branchId", Map.of("type", "string")),
+                                Map.entry("status", Map.of("type", "string", "enum", List.of("accepted", "rejected", "fork", "orphan"))),
+                                Map.entry("reason", Map.of("type", "string")),
+                                Map.entry("policy", Map.of("type", "string")),
+                                Map.entry("finalityDelayBlocks", Map.of("type", "integer")),
+                                Map.entry("blockCount", Map.of("type", "integer")),
+                                Map.entry("cumulativeDifficulty", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("localBlockCount", Map.of("type", "integer")),
+                                Map.entry("localCumulativeDifficulty", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("commonAncestorIndex", Map.of("type", "integer", "nullable", true)),
+                                Map.entry("commonAncestorHash", Map.of("type", "string", "nullable", true)),
+                                Map.entry("tip", schemaRef("BlockReference")),
+                                Map.entry("reviewedAt", Map.of("type", "string", "format", "date-time"))
+                        ))),
+                        Map.entry("BlockReference", objectSchema(Map.of(
+                                "index", Map.of("type", "integer"),
+                                "hash", Map.of("type", "string"),
+                                "previousHash", Map.of("type", "string")
+                        ))),
                         Map.entry("RegisterPeerRequest", objectSchema(Map.of(
                                 "peerId", Map.of("type", "string", "example", "node-b"),
                                 "baseUrl", Map.of("type", "string", "example", "http://localhost:8081")
@@ -270,7 +312,7 @@ public class OpenApiController {
                         || path.startsWith("/api/peers")
                         || path.equals("/api/chain/tamper")
                         || path.equals("/api/chain/reset")
-        ) || "put".equals(route.method()) && path.equals("/api/chain/difficulty")
+        ) || "put".equals(route.method()) && Set.of("/api/chain/difficulty", "/api/chain/consensus").contains(path)
                 || "delete".equals(route.method()) && path.startsWith("/api/peers/");
     }
 
@@ -283,6 +325,9 @@ public class OpenApiController {
         }
         if (path.contains("/peers")) {
             return "peers";
+        }
+        if (path.contains("/chain/consensus") || path.contains("/chain/branches") || path.contains("/chain/forks") || path.contains("/chain/orphans")) {
+            return "consensus";
         }
         if (path.contains("/ops") || path.contains("/docs") || path.contains("/node")) {
             return "operations";
