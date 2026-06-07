@@ -45,11 +45,13 @@ public class BlockchainService {
     private int finalityDelayBlocks;
     private final double miningReward;
     private final int maxTransactionsPerBlock;
+    private final int maxPendingTransactions;
 
     public BlockchainService(
             @Value("${blockchain.difficulty:3}") int difficulty,
             @Value("${blockchain.mining-reward:10}") double miningReward,
             @Value("${blockchain.max-transactions-per-block:5}") int maxTransactionsPerBlock,
+            @Value("${blockchain.mempool.max-transactions:1000}") int maxPendingTransactions,
             @Value("${blockchain.consensus.policy:cumulative-difficulty}") String consensusPolicy,
             @Value("${blockchain.consensus.finality-delay-blocks:0}") int finalityDelayBlocks,
             ChainPersistenceService chainPersistenceService,
@@ -59,7 +61,11 @@ public class BlockchainService {
         if (maxTransactionsPerBlock < 2) {
             throw new IllegalArgumentException("Max transactions per block must be at least 2");
         }
+        if (maxPendingTransactions < 1) {
+            throw new IllegalArgumentException("Max pending transactions must be at least 1");
+        }
         this.maxTransactionsPerBlock = maxTransactionsPerBlock;
+        this.maxPendingTransactions = maxPendingTransactions;
         this.chainPersistenceService = chainPersistenceService;
         this.operationalMetricsService = operationalMetricsService;
         this.consensusPolicy = ConsensusPolicy.fromKey(consensusPolicy);
@@ -98,6 +104,9 @@ public class BlockchainService {
             return false;
         }
 
+        if (isForkAdoption(candidateChain)) {
+            operationalMetricsService.recordForkAdoption();
+        }
         recordConsensusBranch(candidateChain, "accepted", "Candidate chain accepted by " + consensusPolicy.key());
         blockchain.clear();
         blockchain.addAll(candidateChain);
@@ -151,13 +160,16 @@ public class BlockchainService {
             return transaction;
         }
 
-        Map<UtxoKey, UtxoEntry> pendingLedger = ledgerAfterPendingTransactions();
+        List<Transaction> candidatePendingTransactions = candidatePendingTransactionsFor(transaction);
+        Map<UtxoKey, UtxoEntry> pendingLedger = ledgerAfterTransactions(candidatePendingTransactions);
         if (!UtxoLedger.applyPendingTransaction(transaction, pendingLedger)) {
             operationalMetricsService.recordRejectedTransaction();
             LOGGER.warn("event=transaction_rejected source=peer transactionId={} reason=\"Sender balance is insufficient\"", transaction.getTransactionId());
             throw new IllegalArgumentException("Sender balance is insufficient");
         }
 
+        pendingTransactions.clear();
+        pendingTransactions.addAll(candidatePendingTransactions);
         pendingTransactions.add(transaction);
         chainPersistenceService.savePendingTransactions(pendingTransactions);
         return transaction;
@@ -265,6 +277,10 @@ public class BlockchainService {
 
     public int getMaxTransactionsPerBlock() {
         return maxTransactionsPerBlock;
+    }
+
+    public int getMaxPendingTransactions() {
+        return maxPendingTransactions;
     }
 
     public synchronized double getBalance(String address) {
@@ -400,13 +416,46 @@ public class BlockchainService {
     }
 
     private Map<UtxoKey, UtxoEntry> ledgerAfterPendingTransactions() {
+        return ledgerAfterTransactions(pendingTransactions);
+    }
+
+    private Map<UtxoKey, UtxoEntry> ledgerAfterTransactions(List<Transaction> transactions) {
         Map<UtxoKey, UtxoEntry> ledger = UtxoLedger.mutableCopy(UtxoLedger.replay(blockchain, miningReward));
-        for (Transaction pendingTransaction : pendingTransactions) {
+        for (Transaction pendingTransaction : transactions) {
             if (!UtxoLedger.applyPendingTransaction(pendingTransaction, ledger)) {
                 throw new IllegalArgumentException("Pending transaction pool contains invalid ledger transitions");
             }
         }
         return ledger;
+    }
+
+    private List<Transaction> candidatePendingTransactionsFor(Transaction transaction) {
+        List<Transaction> candidatePendingTransactions = new ArrayList<>(pendingTransactions);
+        if (candidatePendingTransactions.size() < maxPendingTransactions) {
+            return candidatePendingTransactions;
+        }
+
+        Transaction lowestFeeTransaction = candidatePendingTransactions.stream()
+                .min((left, right) -> Double.compare(left.getFee(), right.getFee()))
+                .orElse(null);
+        if (lowestFeeTransaction == null || transaction.getFee() <= lowestFeeTransaction.getFee()) {
+            operationalMetricsService.recordRejectedTransaction();
+            LOGGER.warn(
+                    "event=transaction_rejected source=peer transactionId={} reason=\"Mempool is full and fee is too low\"",
+                    transaction.getTransactionId()
+            );
+            throw new IllegalArgumentException("Mempool is full; transaction fee is too low for eviction");
+        }
+
+        candidatePendingTransactions.removeIf(existing -> existing.getTransactionId().equals(lowestFeeTransaction.getTransactionId()));
+        LOGGER.info(
+                "event=mempool_eviction evictedTransactionId={} evictedFee={} replacementTransactionId={} replacementFee={}",
+                lowestFeeTransaction.getTransactionId(),
+                lowestFeeTransaction.getFee(),
+                transaction.getTransactionId(),
+                transaction.getFee()
+        );
+        return candidatePendingTransactions;
     }
 
     private void removeMinedPendingTransactions(Block block) {
@@ -509,6 +558,11 @@ public class BlockchainService {
             }
         }
         return false;
+    }
+
+    private boolean isForkAdoption(List<Block> candidateChain) {
+        Integer ancestorIndex = commonAncestorIndex(candidateChain);
+        return ancestorIndex != null && ancestorIndex < blockchain.size() - 1;
     }
 
     private void reattachKnownOrphans() {

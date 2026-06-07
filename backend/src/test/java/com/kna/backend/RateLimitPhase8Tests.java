@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @SpringBootTest(properties = {
         "blockchain.security.enabled=true",
-        "blockchain.security.operator-token=test-operator",
+        "blockchain.security.operator-token=test-token",
         "blockchain.rate-limit.enabled=true",
         "blockchain.rate-limit.expensive-limit=1",
         "blockchain.rate-limit.window-ms=60000"
@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class RateLimitPhase8Tests {
 
-    private static final String OPERATOR = "Bearer test-operator";
+    private static final String OPERATOR = "Bearer test-token";
 
     @Autowired
     private MockMvc mockMvc;

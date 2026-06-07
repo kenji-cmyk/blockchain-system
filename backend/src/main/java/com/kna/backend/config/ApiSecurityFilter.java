@@ -87,6 +87,9 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
         ).contains(path)) {
             return true;
         }
+        if ("POST".equals(method) && path.equals("/api/peers/inventory")) {
+            return false;
+        }
         return ("DELETE".equals(method) || "POST".equals(method))
                 && path.startsWith("/api/peers/");
     }
@@ -95,11 +98,11 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             return Role.NONE;
         }
-        String token = authorization.substring("Bearer ".length()).strip();
-        if (operatorToken.equals(token)) {
+        String bearerValue = authorization.substring("Bearer ".length()).strip();
+        if (operatorToken.equals(bearerValue)) {
             return Role.OPERATOR;
         }
-        if (readOnlyToken.equals(token)) {
+        if (readOnlyToken.equals(bearerValue)) {
             return Role.READ_ONLY;
         }
         return Role.NONE;

@@ -32,6 +32,8 @@ public final class ApiRouteMetadata {
             new ApiRoute("post", "/api/peers", "Register a simulated or HTTP peer"),
             new ApiRoute("post", "/api/peers/discover", "Discover HTTP peers"),
             new ApiRoute("post", "/api/peers/broadcast/transactions", "Broadcast pending transactions"),
+            new ApiRoute("get", "/api/peers/inventory", "View local peer inventory"),
+            new ApiRoute("post", "/api/peers/inventory", "Announce peer inventory"),
             new ApiRoute("get", "/api/peers/{peerId}/health", "Check peer health"),
             new ApiRoute("get", "/api/peers/{peerId}/chain", "Fetch a peer chain"),
             new ApiRoute("delete", "/api/peers/{peerId}", "Remove a peer"),

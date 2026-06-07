@@ -19,6 +19,8 @@ import com.kna.backend.dto.OperationHealth;
 import com.kna.backend.dto.OperationMetrics;
 import com.kna.backend.dto.PeerDiscoveryRequest;
 import com.kna.backend.dto.PeerHealth;
+import com.kna.backend.dto.PeerInventory;
+import com.kna.backend.dto.PeerInventoryResponse;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.RegisterPeerRequest;
 import com.kna.backend.dto.SyncResult;
@@ -135,6 +137,16 @@ public class BlockchainV1Controller {
     public ApiEnvelope<List<PeerSummary>> getPeers() {
         List<PeerSummary> peers = controller.getPeers();
         return ApiEnvelope.ok(peers, Map.of("count", peers.size()));
+    }
+
+    @GetMapping("/peers/inventory")
+    public ApiEnvelope<PeerInventory> getPeerInventory() {
+        return ApiEnvelope.ok(controller.getPeerInventory());
+    }
+
+    @PostMapping("/peers/inventory")
+    public ApiEnvelope<PeerInventoryResponse> acceptPeerInventory(@RequestBody PeerInventory inventory) {
+        return ApiEnvelope.ok(controller.acceptPeerInventory(inventory));
     }
 
     @GetMapping("/peers/{peerId}/health")

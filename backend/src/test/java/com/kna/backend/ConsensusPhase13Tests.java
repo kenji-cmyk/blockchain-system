@@ -147,6 +147,7 @@ class ConsensusPhase13Tests {
                 DIFFICULTY,
                 MINING_REWARD,
                 MAX_TRANSACTIONS_PER_BLOCK,
+                1000,
                 "cumulative-difficulty",
                 0,
                 persistenceService,

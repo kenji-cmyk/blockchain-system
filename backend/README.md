@@ -592,14 +592,22 @@ curl -X POST http://localhost:8080/api/peers/discover \
 
 Use `GET /api/node/info`, `GET /api/peers`, `GET /api/ops/health`, and `GET /api/ops/metrics` on each published port to inspect identity, peer health, and operational counters.
 
+Run the Phase 14 network partition demo from the repository root:
+
+```powershell
+./scripts/phase14-network-partition-demo.ps1
+```
+
+The script starts the `multinode` profile, registers `node-b` and `node-c`, disconnects `node-c` from the Docker network, mines blocks while the partition is active, reconnects the node, and prints sync plus reliability metrics. Pass `-KeepRunning` to leave the Compose stack running after the demo.
+
 ### Production-Style Configuration Checklist
 
 - Set `BLOCKCHAIN_SECURITY_OPERATOR_TOKEN` and `BLOCKCHAIN_SECURITY_READ_ONLY_TOKEN` to non-default secrets before exposing the API.
 - Keep `BLOCKCHAIN_SECURITY_ENABLED=true` and `BLOCKCHAIN_RATE_LIMIT_ENABLED=true` outside local test profiles.
 - Set a stable `BLOCKCHAIN_NODE_ID` for every deployed node.
 - Use database persistence with a durable volume through `SPRING_DATASOURCE_URL`.
-- Tune `BLOCKCHAIN_PEER_TIMEOUT_MS`, `BLOCKCHAIN_PEER_RETRY_ATTEMPTS`, and `BLOCKCHAIN_PEER_EVICTION_SCORE` for the network being demonstrated.
-- Review structured logs for `event=transaction_rejected`, `event=block_rejected`, and `event=peer_broadcast` when diagnosing sync or propagation issues.
+- Tune `BLOCKCHAIN_PEER_TIMEOUT_MS`, `BLOCKCHAIN_PEER_RETRY_ATTEMPTS`, `BLOCKCHAIN_PEER_QUARANTINE_SCORE`, `BLOCKCHAIN_PEER_BACKOFF_MS`, and `BLOCKCHAIN_MEMPOOL_MAX_TRANSACTIONS` for the network being demonstrated.
+- Review structured logs for `event=transaction_rejected`, `event=mempool_eviction`, `event=block_rejected`, and `event=peer_broadcast` when diagnosing sync or propagation issues.
 
 ## Application Profiles
 

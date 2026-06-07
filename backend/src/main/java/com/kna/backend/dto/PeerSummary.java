@@ -13,6 +13,9 @@ public record PeerSummary(
         List<String> capabilities,
         int score,
         int failureCount,
-        String lastSeenAt
+        String lastSeenAt,
+        String state,
+        String backoffUntil,
+        Long lastLatencyMs
 ) {
 }

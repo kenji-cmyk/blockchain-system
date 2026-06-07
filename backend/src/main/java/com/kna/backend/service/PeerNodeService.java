@@ -7,6 +7,8 @@ import com.kna.backend.dto.BroadcastResult;
 import com.kna.backend.dto.NodeInfo;
 import com.kna.backend.dto.PersistedPeer;
 import com.kna.backend.dto.PeerHealth;
+import com.kna.backend.dto.PeerInventory;
+import com.kna.backend.dto.PeerInventoryResponse;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.SyncResult;
 import com.kna.backend.entity.Block;
@@ -51,7 +53,8 @@ public class PeerNodeService {
     private final Duration timeout;
     private final int retryAttempts;
     private final String nodeId;
-    private final int evictionScore;
+    private final int quarantineScore;
+    private final Duration backoffDuration;
     private final int maxMessageBytes;
     private final boolean scheduledSyncEnabled;
     private final Set<String> seenGossipIds = new HashSet<>();
@@ -65,7 +68,9 @@ public class PeerNodeService {
             "transaction-broadcast",
             "utxo-ledger",
             "consensus-policy",
-            "orphan-reattach"
+            "orphan-reattach",
+            "peer-inventory",
+            "peer-quarantine"
     );
 
     public PeerNodeService(
@@ -75,7 +80,8 @@ public class PeerNodeService {
             @Value("${blockchain.peer.timeout-ms:1500}") long timeoutMs,
             @Value("${blockchain.peer.retry-attempts:2}") int retryAttempts,
             @Value("${blockchain.node.id:}") String configuredNodeId,
-            @Value("${blockchain.peer.eviction-score:-3}") int evictionScore,
+            @Value("${blockchain.peer.quarantine-score:${blockchain.peer.eviction-score:-3}}") int quarantineScore,
+            @Value("${blockchain.peer.backoff-ms:30000}") long backoffMs,
             @Value("${blockchain.peer.max-message-bytes:65536}") int maxMessageBytes,
             @Value("${blockchain.peer.scheduled-sync.enabled:false}") boolean scheduledSyncEnabled
     ) {
@@ -87,7 +93,8 @@ public class PeerNodeService {
         this.nodeId = configuredNodeId == null || configuredNodeId.isBlank()
                 ? "node-" + UUID.randomUUID()
                 : configuredNodeId.strip();
-        this.evictionScore = evictionScore;
+        this.quarantineScore = quarantineScore;
+        this.backoffDuration = Duration.ofMillis(Math.max(1, backoffMs));
         this.maxMessageBytes = Math.max(128, maxMessageBytes);
         this.scheduledSyncEnabled = scheduledSyncEnabled;
         this.httpClient = HttpClient.newBuilder()
@@ -245,6 +252,31 @@ public class PeerNodeService {
         );
     }
 
+    public synchronized PeerInventory getInventory() {
+        return new PeerInventory(
+                blockchainService.getBlocks()
+                        .stream()
+                        .map(Block::getHash)
+                        .toList(),
+                blockchainService.getPendingTransactions()
+                        .stream()
+                        .map(Transaction::getTransactionId)
+                        .toList()
+        );
+    }
+
+    public synchronized PeerInventoryResponse acceptInventory(PeerInventory inventory) {
+        List<String> missingBlockHashes = safeInventoryIds(inventory == null ? null : inventory.blockHashes())
+                .stream()
+                .filter(hash -> !isCommittedBlock(hash))
+                .toList();
+        List<String> missingTransactionIds = safeInventoryIds(inventory == null ? null : inventory.transactionIds())
+                .stream()
+                .filter(transactionId -> !isKnownTransaction(transactionId))
+                .toList();
+        return new PeerInventoryResponse(missingBlockHashes, missingTransactionIds);
+    }
+
     public synchronized Transaction acceptBroadcastTransaction(String body, String gossipId) {
         validatePeerMessage(body, gossipId);
         try {
@@ -320,12 +352,19 @@ public class PeerNodeService {
                 continue;
             }
             peerCount++;
+            if (!peer.canAttempt(Instant.now())) {
+                LOGGER.info("Skipped quarantined peer broadcast peerId={} path={} backoffUntil={}", peer.peerId(), path, peer.backoffUntilText());
+                continue;
+            }
             try {
-                postJson(peer.baseUrl() + path, body, gossipId);
+                if (peerNeedsPayload(peer, path, body, gossipId)) {
+                    postJson(peer.baseUrl() + path, body, gossipId);
+                }
                 successCount++;
                 recordSuccess(peer);
             } catch (IllegalArgumentException exception) {
                 recordFailure(peer);
+                quarantineIfUnhealthy(peer);
                 LOGGER.warn("Could not broadcast {} to peer {}", path, peer.peerId(), exception);
             }
         }
@@ -374,7 +413,10 @@ public class PeerNodeService {
                     peer.capabilities(),
                     peer.score(),
                     peer.failureCount(),
-                    peer.lastSeenAtText()
+                    peer.lastSeenAtText(),
+                    peer.stateText(),
+                    peer.backoffUntilText(),
+                    peer.lastLatencyMs()
             );
         }
 
@@ -395,7 +437,10 @@ public class PeerNodeService {
                 peer.capabilities(),
                 peer.score(),
                 peer.failureCount(),
-                peer.lastSeenAtText()
+                peer.lastSeenAtText(),
+                peer.stateText(),
+                peer.backoffUntilText(),
+                peer.lastLatencyMs()
         );
     }
 
@@ -404,14 +449,29 @@ public class PeerNodeService {
             return new PeerHealth(peer.peerId(), null, true, "Simulated peer is healthy");
         }
 
+        Instant now = Instant.now();
+        if (!peer.canAttempt(now)) {
+            return new PeerHealth(
+                    peer.peerId(),
+                    peer.baseUrl(),
+                    false,
+                    "Peer is quarantined until " + peer.backoffUntilText()
+            );
+        }
+        if (peer.isQuarantined()) {
+            peer.beginRecovery();
+        }
+
         try {
+            long start = System.currentTimeMillis();
             String response = getString(peer.baseUrl() + "/api/chain/status");
+            peer.recordLatency(System.currentTimeMillis() - start);
             recordSuccess(peer);
             return new PeerHealth(peer.peerId(), peer.baseUrl(), true, response);
         } catch (IllegalArgumentException exception) {
             recordFailure(peer);
             PeerHealth health = new PeerHealth(peer.peerId(), peer.baseUrl(), false, exception.getMessage());
-            evictIfUnhealthy(peer);
+            quarantineIfUnhealthy(peer);
             return health;
         }
     }
@@ -455,13 +515,18 @@ public class PeerNodeService {
         Exception lastException = null;
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
+                long start = System.currentTimeMillis();
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    operationalMetricsService.recordPeerLatency(System.currentTimeMillis() - start);
                     return response.body();
                 }
                 throw new IllegalArgumentException("Peer returned HTTP " + response.statusCode());
             } catch (Exception exception) {
                 lastException = exception;
+                if (attempt < retryAttempts) {
+                    operationalMetricsService.recordPeerRetry();
+                }
             }
         }
         throw new IllegalArgumentException("Peer request failed: " + lastException.getMessage(), lastException);
@@ -490,14 +555,34 @@ public class PeerNodeService {
             throw new PeerMessageTooLargeException("Peer message exceeds " + maxMessageBytes + " bytes");
         }
         if (gossipId != null && !gossipId.isBlank() && !seenGossipIds.add(gossipId)) {
+            operationalMetricsService.recordDuplicateGossipMessage();
             throw new DuplicatePeerMessageException("Duplicate peer gossip message");
         }
     }
 
     private boolean isCommittedBlock(String hash) {
+        if (hash == null || hash.isBlank()) {
+            return false;
+        }
         return blockchainService.getBlocks()
                 .stream()
                 .anyMatch(block -> block.getHash().equals(hash));
+    }
+
+    private boolean isKnownTransaction(String transactionId) {
+        if (transactionId == null || transactionId.isBlank()) {
+            return false;
+        }
+        boolean pending = blockchainService.getPendingTransactions()
+                .stream()
+                .anyMatch(transaction -> transaction.getTransactionId().equals(transactionId));
+        if (pending) {
+            return true;
+        }
+        return blockchainService.getBlocks()
+                .stream()
+                .flatMap(block -> block.getTransactions().stream())
+                .anyMatch(transaction -> transaction.getTransactionId().equals(transactionId));
     }
 
     private void recordSuccess(PeerNode peer) {
@@ -508,12 +593,70 @@ public class PeerNodeService {
         peer.recordFailure();
     }
 
-    private void evictIfUnhealthy(PeerNode peer) {
-        if (peer.score() <= evictionScore) {
-            peers.remove(peer.peerId());
+    private void quarantineIfUnhealthy(PeerNode peer) {
+        if (peer.score() <= quarantineScore) {
+            peer.quarantine(backoffDuration);
             savePeers();
-            LOGGER.warn("Evicted unhealthy peer peerId={} score={}", peer.peerId(), peer.score());
+            LOGGER.warn("Quarantined unhealthy peer peerId={} score={} backoffUntil={}", peer.peerId(), peer.score(), peer.backoffUntilText());
         }
+    }
+
+    private boolean peerNeedsPayload(PeerNode peer, String path, String body, String gossipId) {
+        PeerInventory inventory = inventoryForPayload(path, body);
+        if (inventory == null) {
+            return true;
+        }
+        try {
+            String response = postJson(peer.baseUrl() + "/api/peers/inventory", gson.toJson(inventory), gossipIdOrNew(gossipId));
+            PeerInventoryResponse inventoryResponse = gson.fromJson(response, PeerInventoryResponse.class);
+            if (inventoryResponse == null) {
+                return true;
+            }
+            if (!inventory.blockHashes().isEmpty()) {
+                String blockHash = inventory.blockHashes().getFirst();
+                return safeInventoryIds(inventoryResponse.missingBlockHashes()).contains(blockHash);
+            }
+            if (!inventory.transactionIds().isEmpty()) {
+                String transactionId = inventory.transactionIds().getFirst();
+                return safeInventoryIds(inventoryResponse.missingTransactionIds()).contains(transactionId);
+            }
+            return true;
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Peer inventory preflight failed peerId={} path={}", peer.peerId(), path, exception);
+            return true;
+        }
+    }
+
+    private PeerInventory inventoryForPayload(String path, String body) {
+        try {
+            if ("/api/blocks/broadcast".equals(path)) {
+                Block block = gson.fromJson(body, Block.class);
+                if (block == null || block.getHash() == null || block.getHash().isBlank()) {
+                    return null;
+                }
+                return new PeerInventory(List.of(block.getHash()), List.of());
+            }
+            if ("/api/transactions/broadcast".equals(path)) {
+                Transaction transaction = gson.fromJson(body, Transaction.class);
+                if (transaction == null || transaction.getTransactionId() == null || transaction.getTransactionId().isBlank()) {
+                    return null;
+                }
+                return new PeerInventory(List.of(), List.of(transaction.getTransactionId()));
+            }
+            return null;
+        } catch (JsonSyntaxException exception) {
+            return null;
+        }
+    }
+
+    private List<String> safeInventoryIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
     }
 
     private String appVersion() {
@@ -608,6 +751,10 @@ public class PeerNodeService {
         private int score;
         private int failureCount;
         private Instant lastSeenAt;
+        private PeerState state = PeerState.ACTIVE;
+        private Instant backoffUntil;
+        private Long lastLatencyMs;
+        private int recoverySuccessCount;
 
         private PeerNode(String peerId, String baseUrl, List<Block> simulatedChain) {
             this.peerId = peerId;
@@ -629,11 +776,47 @@ public class PeerNodeService {
         void recordSuccess() {
             score++;
             lastSeenAt = Instant.now();
+            failureCount = 0;
+            if (state == PeerState.RECOVERING) {
+                recoverySuccessCount++;
+                if (recoverySuccessCount >= 2) {
+                    state = PeerState.ACTIVE;
+                    backoffUntil = null;
+                }
+                return;
+            }
+            state = PeerState.ACTIVE;
+            backoffUntil = null;
         }
 
         void recordFailure() {
             score--;
             failureCount++;
+        }
+
+        void quarantine(Duration backoffDuration) {
+            state = PeerState.QUARANTINED;
+            backoffUntil = Instant.now().plus(backoffDuration);
+            recoverySuccessCount = 0;
+        }
+
+        boolean canAttempt(Instant now) {
+            return state != PeerState.QUARANTINED
+                    || backoffUntil == null
+                    || !now.isBefore(backoffUntil);
+        }
+
+        boolean isQuarantined() {
+            return state == PeerState.QUARANTINED;
+        }
+
+        void beginRecovery() {
+            state = PeerState.RECOVERING;
+            recoverySuccessCount = 0;
+        }
+
+        void recordLatency(long elapsedMs) {
+            lastLatencyMs = Math.max(0, elapsedMs);
         }
 
         String peerId() {
@@ -666,6 +849,34 @@ public class PeerNodeService {
 
         String lastSeenAtText() {
             return lastSeenAt == null ? null : lastSeenAt.toString();
+        }
+
+        String stateText() {
+            return state.value();
+        }
+
+        String backoffUntilText() {
+            return backoffUntil == null ? null : backoffUntil.toString();
+        }
+
+        Long lastLatencyMs() {
+            return lastLatencyMs;
+        }
+    }
+
+    private enum PeerState {
+        ACTIVE("active"),
+        QUARANTINED("quarantined"),
+        RECOVERING("recovering");
+
+        private final String value;
+
+        PeerState(String value) {
+            this.value = value;
+        }
+
+        String value() {
+            return value;
         }
     }
 }

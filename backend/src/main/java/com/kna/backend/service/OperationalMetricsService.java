@@ -24,6 +24,10 @@ public class OperationalMetricsService {
     private final AtomicLong blockBroadcastAttempts = new AtomicLong();
     private final AtomicLong blockBroadcastSuccesses = new AtomicLong();
     private final AtomicLong blockBroadcastFailures = new AtomicLong();
+    private final AtomicLong peerLatencyMsTotal = new AtomicLong();
+    private final AtomicLong peerRetryAttempts = new AtomicLong();
+    private final AtomicLong duplicateGossipMessages = new AtomicLong();
+    private final AtomicLong forkAdoptionEvents = new AtomicLong();
 
     public void resetWindow() {
         validationRuns.set(0);
@@ -43,6 +47,10 @@ public class OperationalMetricsService {
         blockBroadcastAttempts.set(0);
         blockBroadcastSuccesses.set(0);
         blockBroadcastFailures.set(0);
+        peerLatencyMsTotal.set(0);
+        peerRetryAttempts.set(0);
+        duplicateGossipMessages.set(0);
+        forkAdoptionEvents.set(0);
     }
 
     public void recordValidation() {
@@ -92,6 +100,22 @@ public class OperationalMetricsService {
         }
     }
 
+    public void recordPeerLatency(long elapsedMs) {
+        peerLatencyMsTotal.addAndGet(Math.max(0, elapsedMs));
+    }
+
+    public void recordPeerRetry() {
+        peerRetryAttempts.incrementAndGet();
+    }
+
+    public void recordDuplicateGossipMessage() {
+        duplicateGossipMessages.incrementAndGet();
+    }
+
+    public void recordForkAdoption() {
+        forkAdoptionEvents.incrementAndGet();
+    }
+
     public Snapshot snapshot() {
         return new Snapshot(
                 validationRuns.get(),
@@ -110,7 +134,11 @@ public class OperationalMetricsService {
                 transactionBroadcastFailures.get(),
                 blockBroadcastAttempts.get(),
                 blockBroadcastSuccesses.get(),
-                blockBroadcastFailures.get()
+                blockBroadcastFailures.get(),
+                peerLatencyMsTotal.get(),
+                peerRetryAttempts.get(),
+                duplicateGossipMessages.get(),
+                forkAdoptionEvents.get()
         );
     }
 
@@ -131,7 +159,11 @@ public class OperationalMetricsService {
             long transactionBroadcastFailures,
             long blockBroadcastAttempts,
             long blockBroadcastSuccesses,
-            long blockBroadcastFailures
+            long blockBroadcastFailures,
+            long peerLatencyMsTotal,
+            long peerRetryAttempts,
+            long duplicateGossipMessages,
+            long forkAdoptionEvents
     ) {
     }
 }

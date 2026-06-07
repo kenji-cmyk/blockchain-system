@@ -116,7 +116,7 @@ class PeerNetworkPhase7Tests {
     }
 
     @Test
-    void evictsHttpPeerAfterHealthScoreDropsTooLow() throws Exception {
+    void quarantinesHttpPeerAfterHealthScoreDropsTooLow() throws Exception {
         HttpServer server = startPeerServer(true);
         String baseUrl = "http://localhost:" + server.getAddress().getPort();
         mockMvc.perform(post("/api/peers")
@@ -136,7 +136,10 @@ class PeerNetworkPhase7Tests {
 
         mockMvc.perform(get("/api/peers"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].peerId").value("node-http"))
+                .andExpect(jsonPath("$[0].state").value("quarantined"))
+                .andExpect(jsonPath("$[0].backoffUntil", notNullValue()));
     }
 
     @Test

@@ -74,6 +74,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         return path.equals("/api/blocks")
                 || path.equals("/api/transactions/mine")
                 || path.equals("/api/peers/broadcast/transactions")
+                || path.equals("/api/peers/inventory")
                 || path.equals("/api/transactions/broadcast")
                 || path.equals("/api/blocks/broadcast");
     }

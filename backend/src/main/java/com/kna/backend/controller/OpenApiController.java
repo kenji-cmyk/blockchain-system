@@ -170,6 +170,10 @@ public class OpenApiController {
             case "/api/transactions/mine" -> jsonRequest("MineTransactionsRequest", Map.of("rewardAddress", "{{minerPublicKey}}"));
             case "/api/peers" -> jsonRequest("RegisterPeerRequest", Map.of("peerId", "node-b", "baseUrl", "http://localhost:8081"));
             case "/api/peers/discover" -> jsonRequest("PeerDiscoveryRequest", Map.of("peerUrls", List.of("http://localhost:8081", "http://localhost:8082")));
+            case "/api/peers/inventory" -> jsonRequest("PeerInventory", Map.of(
+                    "blockHashes", List.of("{{blockHash}}"),
+                    "transactionIds", List.of("{{transactionId}}")
+            ));
             case "/api/peers/{peerId}/blocks" -> jsonRequest("MinePeerBlockRequest", Map.of("minerAddress", "{{minerPublicKey}}"));
             case "/api/chain/difficulty" -> jsonRequest("DifficultyRequest", Map.of("difficulty", 2));
             case "/api/chain/consensus" -> jsonRequest("ConsensusSettingsRequest", Map.of(
@@ -266,6 +270,59 @@ public class OpenApiController {
                                 "baseUrl", Map.of("type", "string", "example", "http://localhost:8081")
                         ))),
                         Map.entry("PeerDiscoveryRequest", objectSchema(Map.of("peerUrls", Map.of("type", "array", "items", Map.of("type", "string"))))),
+                        Map.entry("PeerInventory", objectSchema(Map.of(
+                                "blockHashes", Map.of("type", "array", "items", Map.of("type", "string")),
+                                "transactionIds", Map.of("type", "array", "items", Map.of("type", "string"))
+                        ))),
+                        Map.entry("PeerInventoryResponse", objectSchema(Map.of(
+                                "missingBlockHashes", Map.of("type", "array", "items", Map.of("type", "string")),
+                                "missingTransactionIds", Map.of("type", "array", "items", Map.of("type", "string"))
+                        ))),
+                        Map.entry("PeerSummary", objectSchema(Map.ofEntries(
+                                Map.entry("peerId", Map.of("type", "string")),
+                                Map.entry("chainSize", Map.of("type", "integer")),
+                                Map.entry("valid", Map.of("type", "boolean")),
+                                Map.entry("baseUrl", Map.of("type", "string", "nullable", true)),
+                                Map.entry("healthy", Map.of("type", "boolean")),
+                                Map.entry("mode", Map.of("type", "string", "enum", List.of("http", "simulated"))),
+                                Map.entry("nodeId", Map.of("type", "string")),
+                                Map.entry("capabilities", Map.of("type", "array", "items", Map.of("type", "string"))),
+                                Map.entry("score", Map.of("type", "integer")),
+                                Map.entry("failureCount", Map.of("type", "integer")),
+                                Map.entry("lastSeenAt", Map.of("type", "string", "format", "date-time", "nullable", true)),
+                                Map.entry("state", Map.of("type", "string", "enum", List.of("active", "quarantined", "recovering"))),
+                                Map.entry("backoffUntil", Map.of("type", "string", "format", "date-time", "nullable", true)),
+                                Map.entry("lastLatencyMs", Map.of("type", "integer", "format", "int64", "nullable", true))
+                        ))),
+                        Map.entry("OperationMetrics", objectSchema(Map.ofEntries(
+                                Map.entry("chainSize", Map.of("type", "integer")),
+                                Map.entry("pendingTransactions", Map.of("type", "integer")),
+                                Map.entry("cumulativeDifficulty", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("forkBlocks", Map.of("type", "integer")),
+                                Map.entry("orphanBlocks", Map.of("type", "integer")),
+                                Map.entry("peers", Map.of("type", "integer")),
+                                Map.entry("validationRuns", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("minedBlocks", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("minedTransactions", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("miningNonceTotal", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("miningElapsedMsTotal", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("rejectedTransactions", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("acceptedBroadcastBlocks", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("rejectedBroadcastBlocks", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("peerSyncAttempts", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("peerSyncSuccesses", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("peerSyncAdoptions", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("transactionBroadcastAttempts", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("transactionBroadcastSuccesses", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("transactionBroadcastFailures", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("blockBroadcastAttempts", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("blockBroadcastSuccesses", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("blockBroadcastFailures", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("peerLatencyMsTotal", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("peerRetryAttempts", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("duplicateGossipMessages", Map.of("type", "integer", "format", "int64")),
+                                Map.entry("forkAdoptionEvents", Map.of("type", "integer", "format", "int64"))
+                        ))),
                         Map.entry("MinePeerBlockRequest", objectSchema(Map.of("minerAddress", Map.of("type", "string", "example", "{{minerPublicKey}}")))),
                         Map.entry("DifficultyRequest", objectSchema(Map.of("difficulty", Map.of("type", "integer", "minimum", 0, "maximum", 6, "example", 2)))),
                         Map.entry("TamperBlockRequest", objectSchema(Map.of(
@@ -306,13 +363,17 @@ public class OpenApiController {
 
     private boolean requiresOperator(ApiRoute route) {
         String path = route.path().replaceFirst("^/api/v1", "/api");
-        return "post".equals(route.method()) && (
-                path.equals("/api/blocks")
-                        || path.equals("/api/transactions/mine")
-                        || path.startsWith("/api/peers")
-                        || path.equals("/api/chain/tamper")
-                        || path.equals("/api/chain/reset")
-        ) || "put".equals(route.method()) && Set.of("/api/chain/difficulty", "/api/chain/consensus").contains(path)
+        return "post".equals(route.method()) && Set.of(
+                "/api/blocks",
+                "/api/transactions/mine",
+                "/api/peers",
+                "/api/peers/discover",
+                "/api/peers/broadcast/transactions",
+                "/api/chain/tamper",
+                "/api/chain/reset"
+        ).contains(path)
+                || "post".equals(route.method()) && path.startsWith("/api/peers/") && !path.equals("/api/peers/inventory")
+                || "put".equals(route.method()) && Set.of("/api/chain/difficulty", "/api/chain/consensus").contains(path)
                 || "delete".equals(route.method()) && path.startsWith("/api/peers/");
     }
 

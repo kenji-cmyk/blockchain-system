@@ -23,6 +23,10 @@ public record OperationMetrics(
         long transactionBroadcastFailures,
         long blockBroadcastAttempts,
         long blockBroadcastSuccesses,
-        long blockBroadcastFailures
+        long blockBroadcastFailures,
+        long peerLatencyMsTotal,
+        long peerRetryAttempts,
+        long duplicateGossipMessages,
+        long forkAdoptionEvents
 ) {
 }

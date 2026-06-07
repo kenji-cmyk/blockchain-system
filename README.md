@@ -313,11 +313,13 @@ Phase 13 consensus note: this remains an educational single-process/HTTP-peer mo
 
 ### Phase 14: Network Reliability
 
-- [ ] Add peer backoff, quarantine, and recovery states instead of immediate score-only eviction.
-- [ ] Add peer inventory messages so nodes can announce block and transaction ids before sending full payloads.
-- [ ] Add bounded mempool capacity with eviction rules and clear rejection reasons.
-- [ ] Add network-partition demo scripts for the Docker Compose multi-node profile.
-- [ ] Add metrics for peer latency, retry count, duplicate gossip messages, and fork adoption events.
+- [x] Add peer backoff, quarantine, and recovery states instead of immediate score-only eviction.
+- [x] Add peer inventory messages so nodes can announce block and transaction ids before sending full payloads.
+- [x] Add bounded mempool capacity with eviction rules and clear rejection reasons.
+- [x] Add network-partition demo scripts for the Docker Compose multi-node profile.
+- [x] Add metrics for peer latency, retry count, duplicate gossip messages, and fork adoption events.
+
+Phase 14 reliability note: unhealthy HTTP peers now move through `active`, `quarantined`, and `recovering` states with configurable backoff instead of being removed immediately. Gossip broadcasts first announce block hashes or transaction ids through peer inventory so receivers can request only missing payloads. The mempool is bounded by `blockchain.mempool.max-transactions` and replaces the lowest-fee pending transaction only when the incoming transaction pays a higher fee. Use `scripts/phase14-network-partition-demo.ps1` with the Docker Compose `multinode` profile to isolate and reconnect `node-c` while watching peer state and operational metrics.
 
 ### Phase 15: Security Hardening
 

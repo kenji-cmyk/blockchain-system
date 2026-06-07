@@ -18,6 +18,8 @@ import com.kna.backend.dto.OperationHealth;
 import com.kna.backend.dto.OperationMetrics;
 import com.kna.backend.dto.PeerDiscoveryRequest;
 import com.kna.backend.dto.PeerHealth;
+import com.kna.backend.dto.PeerInventory;
+import com.kna.backend.dto.PeerInventoryResponse;
 import com.kna.backend.dto.PeerSummary;
 import com.kna.backend.dto.RegisterPeerRequest;
 import com.kna.backend.dto.SyncResult;
@@ -199,6 +201,16 @@ public class BlockchainController {
         return peerNodeService.getPeers();
     }
 
+    @GetMapping("/peers/inventory")
+    public PeerInventory getPeerInventory() {
+        return peerNodeService.getInventory();
+    }
+
+    @PostMapping("/peers/inventory")
+    public PeerInventoryResponse acceptPeerInventory(@RequestBody PeerInventory inventory) {
+        return peerNodeService.acceptInventory(inventory);
+    }
+
     @GetMapping("/peers/{peerId}/health")
     public PeerHealth checkPeerHealth(@PathVariable String peerId) {
         try {
@@ -342,7 +354,11 @@ public class BlockchainController {
                 snapshot.transactionBroadcastFailures(),
                 snapshot.blockBroadcastAttempts(),
                 snapshot.blockBroadcastSuccesses(),
-                snapshot.blockBroadcastFailures()
+                snapshot.blockBroadcastFailures(),
+                snapshot.peerLatencyMsTotal(),
+                snapshot.peerRetryAttempts(),
+                snapshot.duplicateGossipMessages(),
+                snapshot.forkAdoptionEvents()
         );
     }
 
